@@ -39,7 +39,7 @@ export default function CoachPage() {
       ...prev,
       chapterId: first.id,
       fromVerse: 1,
-      toVerse: Math.min(5, first.versesCount),
+      toVerse: first.versesCount,
     }));
   }, [chapters, params.chapterId]);
 

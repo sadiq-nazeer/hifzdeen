@@ -156,6 +156,13 @@ input:focus-visible {
   border-radius: 0.5rem;
 }
 
+/* Searchable select search input: no yellow focus ring, minimal visibility */
+.searchable-select-search-input:focus-visible {
+  outline: none;
+  outline-offset: 0;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-primary) 15%, transparent);
+}
+
 .header-glow {
   box-shadow: 0 40px 120px -60px color-mix(in srgb, var(--brand-primary) 35%, transparent);
 }
