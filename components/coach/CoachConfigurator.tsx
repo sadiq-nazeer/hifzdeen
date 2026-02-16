@@ -116,7 +116,7 @@ export const CoachConfigurator = ({
 
       <div className="p-6">
         {/* Surah & range */}
-        <div className="mb-6">
+        <div id="session-range" className="mb-6 scroll-mt-24">
           <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-foreground-muted">
             Surah & range
           </h3>

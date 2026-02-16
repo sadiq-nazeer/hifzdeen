@@ -13,7 +13,7 @@ export function Header() {
             href="/"
             className="text-lg font-semibold text-foreground no-underline transition hover:text-brand sm:text-xl"
           >
-            hifzul
+            hifzul.com
           </Link>
           {/* Reserved for nav links, etc. */}
         </div>

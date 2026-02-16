@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   useChapterAudioPlaylist,
   type ChapterAudioEntry,
@@ -9,6 +9,27 @@ import type { CoachSessionVerse } from "@/lib/types/quran";
 
 type PlaybackScope = "session" | "surah";
 
+type CurrentAyahHighlight =
+  | "brand"
+  | "accent"
+  | "teal"
+  | "amber"
+  | "rose"
+  | "none";
+
+const AYAH_HIGHLIGHT_OPTIONS: Array<{
+  id: CurrentAyahHighlight;
+  label: string;
+  className: string;
+}> = [
+  { id: "brand", label: "Theme", className: "text-brand" },
+  { id: "accent", label: "Accent", className: "text-brand-accent" },
+  { id: "teal", label: "Teal", className: "text-teal-400" },
+  { id: "amber", label: "Amber", className: "text-amber-400" },
+  { id: "rose", label: "Rose", className: "text-rose-400" },
+  { id: "none", label: "None", className: "text-foreground" },
+];
+
 type Props = {
   sessionVerses: CoachSessionVerse[];
   chapterId?: number;
@@ -16,6 +37,14 @@ type Props = {
   reciterId?: number;
   reciterName?: string;
 };
+
+const ARABIC_NUMERALS = "٠١٢٣٤٥٦٧٨٩";
+
+const toArabicNumerals = (n: number): string =>
+  String(n)
+    .split("")
+    .map((d) => ARABIC_NUMERALS[Number.parseInt(d, 10)] ?? d)
+    .join("");
 
 const formatDuration = (seconds: number): string => {
   if (!Number.isFinite(seconds) || seconds <= 0) {
@@ -47,7 +76,13 @@ export const SurahAudioPanel = ({
   reciterId,
   reciterName,
 }: Props) => {
+  const AYAT_PER_PAGE = 10;
+
   const [scope, setScope] = useState<PlaybackScope>("session");
+  const [fullSurahTextView, setFullSurahTextView] = useState(false);
+  const [currentAyahHighlight, setCurrentAyahHighlight] =
+    useState<CurrentAyahHighlight>("brand");
+  const [surahPage, setSurahPage] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loopSelection, setLoopSelection] = useState(false);
@@ -55,6 +90,10 @@ export const SurahAudioPanel = ({
   const [trackDurationFromAudio, setTrackDurationFromAudio] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const lastLoadedSrcRef = useRef<string>("");
+
+  const scrollToRangeSection = () => {
+    document.getElementById("session-range")?.scrollIntoView({ behavior: "smooth" });
+  };
 
   const sessionPlaylist = useMemo<ChapterAudioEntry[]>(
     () =>
@@ -108,6 +147,10 @@ export const SurahAudioPanel = ({
     setCurrentTime(0);
     setTrackDurationFromAudio(0);
     lastLoadedSrcRef.current = "";
+    if (scope === "session") {
+      setFullSurahTextView(false);
+      setSurahPage(0);
+    }
     const audio = audioRef.current;
     if (audio) {
       audio.pause();
@@ -182,6 +225,40 @@ export const SurahAudioPanel = ({
   useEffect(() => {
     if (!currentAudioUrl) setTrackDurationFromAudio(0);
   }, [currentAudioUrl]);
+
+  const surahTotalPages = Math.max(
+    1,
+    Math.ceil(activePlaylist.length / AYAT_PER_PAGE),
+  );
+  const safeSurahPage = Math.min(surahPage, Math.max(0, surahTotalPages - 1));
+  const surahPageAyat = useMemo(
+    () =>
+      activePlaylist.slice(
+        safeSurahPage * AYAT_PER_PAGE,
+        (safeSurahPage + 1) * AYAT_PER_PAGE,
+      ),
+    [activePlaylist, safeSurahPage],
+  );
+
+  useEffect(() => {
+    if (surahPage >= surahTotalPages && surahTotalPages > 0) {
+      setSurahPage(Math.max(0, surahTotalPages - 1));
+    }
+  }, [surahPage, surahTotalPages]);
+
+  const currentTrackVerseKey = currentTrack?.verseKey;
+
+  useEffect(() => {
+    if (!isSurahScope || !fullSurahTextView || !currentTrackVerseKey || activePlaylist.length === 0) {
+      return;
+    }
+    const idx = activePlaylist.findIndex((e) => e.verseKey === currentTrackVerseKey);
+    if (idx >= 0) {
+      const pageForAyah = Math.floor(idx / AYAT_PER_PAGE);
+      setSurahPage((prev) => (pageForAyah !== prev ? pageForAyah : prev));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fixed-length primitive deps to avoid "dependency array changed size" error
+  }, [isSurahScope, fullSurahTextView, currentTrackVerseKey, playlistSignature]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -299,7 +376,7 @@ export const SurahAudioPanel = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {scopeButtons.map((button) => (
             <button
               key={button.id}
@@ -315,6 +392,28 @@ export const SurahAudioPanel = ({
               {button.label}
             </button>
           ))}
+          {scope === "session" && sessionPlaylist.length > 0 && (
+            <button
+              type="button"
+              className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold text-foreground transition hover:border-brand/40 hover:bg-brand/10 hover:text-brand"
+              onClick={scrollToRangeSection}
+            >
+              Change range
+            </button>
+          )}
+          {isSurahScope && chapterId && activePlaylist.length > 0 && (
+            <button
+              type="button"
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                fullSurahTextView
+                  ? "bg-white/15 text-foreground"
+                  : "bg-white/10 text-foreground hover:bg-white/20"
+              }`}
+              onClick={() => setFullSurahTextView((prev) => !prev)}
+            >
+              {fullSurahTextView ? "Ayah only view" : "Full surah view"}
+            </button>
+          )}
         </div>
       </header>
 
@@ -416,23 +515,112 @@ export const SurahAudioPanel = ({
           )}
 
           <div className="space-y-4 p-4 pt-0">
-
-          <div>
-            {currentTrack && (
-              <p className="mb-1 text-xs font-semibold text-foreground-muted">
-                Now playing • Ayah {currentTrack.orderInChapter}
-              </p>
+            {isSurahScope && fullSurahTextView && activePlaylist.length > 0 ? (
+              <div className="full-surah-ayat-list">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs font-semibold text-foreground-muted">
+                    Full surah • {activePlaylist.length} ayat
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-foreground-muted">
+                      Highlight:
+                    </span>
+                    {AYAH_HIGHLIGHT_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        className={`rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                          currentAyahHighlight === opt.id
+                            ? "bg-white/15 text-foreground ring-1 ring-white/20"
+                            : "text-foreground-muted hover:bg-white/10 hover:text-foreground"
+                        }`}
+                        onClick={() => setCurrentAyahHighlight(opt.id)}
+                        title={`Current ayah color: ${opt.label}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={safeSurahPage <= 0}
+                      className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-white/5"
+                      onClick={() => setSurahPage((p) => Math.max(0, p - 1))}
+                    >
+                      Previous
+                    </button>
+                    <span className="text-xs tabular-nums text-foreground-muted">
+                      Page {safeSurahPage + 1} of {surahTotalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={safeSurahPage >= surahTotalPages - 1}
+                      className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-white/5"
+                      onClick={() =>
+                        setSurahPage((p) => Math.min(surahTotalPages - 1, p + 1))
+                      }
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-surface-muted/30 p-5">
+                  <div
+                    className="surah-paragraph text-center text-2xl leading-loose text-foreground md:text-3xl"
+                    dir="rtl"
+                  >
+                    {surahPageAyat.map((entry) => {
+                      const isCurrentAyah = currentTrack?.verseKey === entry.verseKey;
+                      const highlightClass =
+                        isCurrentAyah
+                          ? AYAH_HIGHLIGHT_OPTIONS.find(
+                              (o) => o.id === currentAyahHighlight,
+                            )?.className
+                          : undefined;
+                      return (
+                        <Fragment key={entry.verseKey}>
+                          <span
+                            className={highlightClass}
+                          >
+                            {entry.text}
+                          </span>
+                          <span
+                            className="verse-number-marker verse-number-marker--circle"
+                            aria-label={`Ayah ${entry.orderInChapter}`}
+                          >
+                            {toArabicNumerals(entry.orderInChapter)}
+                          </span>
+                          {" "}
+                        </Fragment>
+                      );
+                    })}
+                  </div>
+                </div>
+                {currentTrack && (
+                  <p className="mt-2 text-xs text-foreground-muted">
+                    Now playing: Ayah {currentTrack.orderInChapter}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div>
+                {currentTrack && (
+                  <p className="mb-1 text-xs font-semibold text-foreground-muted">
+                    Now playing • Ayah {currentTrack.orderInChapter}
+                  </p>
+                )}
+                <div className="now-playing-card rounded-xl border-l-4 border-brand bg-surface-highlight/50 p-4 text-foreground">
+                  {currentTrack ? (
+                    <p className="text-right text-3xl leading-snug text-foreground" dir="rtl">
+                      {currentTrack.text}
+                    </p>
+                  ) : (
+                    <p className="text-xs">No ayah selected yet.</p>
+                  )}
+                </div>
+              </div>
             )}
-            <div className="now-playing-card rounded-xl border-l-4 border-brand bg-surface-highlight/50 p-4 text-foreground">
-              {currentTrack ? (
-                <p className="text-right text-3xl leading-snug text-foreground" dir="rtl">
-                  {currentTrack.text}
-                </p>
-              ) : (
-                <p className="text-xs">No ayah selected yet.</p>
-              )}
-            </div>
-          </div>
           </div>
         </div>
       )}
