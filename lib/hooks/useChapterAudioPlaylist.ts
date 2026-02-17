@@ -22,6 +22,8 @@ type ChapterAudioResponse = {
     versesCount: number;
   };
   playlist: ChapterAudioEntry[];
+  /** Total chapter duration in seconds (from chapter_recitations when available) */
+  totalDurationSeconds?: number;
   fullSurah?: FullSurahAudio;
 };
 
@@ -63,6 +65,7 @@ export const useChapterAudioPlaylist = ({
   return {
     playlist: data?.playlist ?? [],
     fullSurahAudio: data?.fullSurah,
+    totalDurationSeconds: data?.totalDurationSeconds,
     chapterMeta: data?.chapter,
     isLoading: shouldFetch ? isLoading : false,
     isError: Boolean(error),

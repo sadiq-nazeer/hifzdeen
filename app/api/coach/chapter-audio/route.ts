@@ -26,8 +26,6 @@ export async function GET(request: Request) {
     );
   }
 
-  const fullSurah = searchParams.get("fullSurah") === "true";
-
   try {
     const chapters = await qfApi.listChapters();
     const chapter = chapters.find((entry) => entry.id === chapterId);
@@ -39,7 +37,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const [versesResult, fullSurahAudio] = await Promise.all([
+    const [versesResult, totalDurationSeconds] = await Promise.all([
       qfApi.buildCoachBundle({
         chapterId,
         fromVerse: 1,
@@ -47,12 +45,10 @@ export async function GET(request: Request) {
         perPage: 50,
         reciterId,
       }),
-      fullSurah
-        ? qfApi.getChapterAudioFile({
-            reciterId: reciterId ?? undefined,
-            chapterNumber: chapterId,
-          })
-        : Promise.resolve(undefined),
+      qfApi.getChapterAudioDurationSeconds({
+        reciterId: reciterId ?? undefined,
+        chapterNumber: chapterId,
+      }),
     ]);
 
     const playlist = versesResult
@@ -65,7 +61,7 @@ export async function GET(request: Request) {
         durationSeconds: entry.audio?.audio.durationSeconds ?? 0,
       }));
 
-    if (!playlist.length && !fullSurahAudio) {
+    if (!playlist.length) {
       return NextResponse.json(
         {
           error: "No playable audio segments were returned for this chapter.",
@@ -77,7 +73,7 @@ export async function GET(request: Request) {
     const payload: {
       chapter: { id: number; nameSimple: string; versesCount: number };
       playlist: typeof playlist;
-      fullSurah?: { audioUrl: string; timestamps: Array<{ verseKey: string; fromMs: number; toMs: number; durationMs: number }> };
+      totalDurationSeconds?: number;
     } = {
       chapter: {
         id: chapter.id,
@@ -86,13 +82,9 @@ export async function GET(request: Request) {
       },
       playlist,
     };
-    if (fullSurahAudio) {
-      payload.fullSurah = {
-        audioUrl: fullSurahAudio.audioUrl,
-        timestamps: fullSurahAudio.timestamps,
-      };
+    if (totalDurationSeconds !== undefined && totalDurationSeconds > 0) {
+      payload.totalDurationSeconds = totalDurationSeconds;
     }
-
     return NextResponse.json(payload);
   } catch (error) {
     console.error("Failed to assemble chapter audio playlist", error);

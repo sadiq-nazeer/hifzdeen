@@ -604,6 +604,46 @@ export const qfApi = {
   },
 
   /**
+   * Get total chapter (surah) audio duration in seconds with one API call.
+   * Uses chapter_recitations with segments=true so API returns timestamps; returns
+   * last verse's timestamp_to / 1000. Otherwise returns undefined.
+   * See: https://api-docs.quran.foundation/docs/content_apis_versioned/chapter-reciter-audio-file
+   */
+  getChapterAudioDurationSeconds: async ({
+    reciterId = appConfig.defaultAudioReciterId,
+    chapterNumber,
+  }: {
+    reciterId?: number;
+    chapterNumber: number;
+  }): Promise<number | undefined> => {
+    const id = reciterId ?? appConfig.defaultAudioReciterId;
+    if (!Number.isFinite(chapterNumber) || chapterNumber < 1 || chapterNumber > 114) {
+      return undefined;
+    }
+    try {
+      const data = await qfFetch<RawChapterAudioFileResponse>(
+        `chapter_recitations/${id}/${chapterNumber}`,
+        {
+          query: { segments: "true" },
+          tags: [`chapter-audio-duration-${chapterNumber}-${id}`],
+          revalidateSeconds: 3600,
+        },
+      );
+      const timestamps = data.audio_file?.timestamps;
+      if (!timestamps?.length) return undefined;
+      const last = timestamps[timestamps.length - 1];
+      const totalMs = last.timestamp_to;
+      if (!Number.isFinite(totalMs) || totalMs < 0) return undefined;
+      return totalMs / 1000;
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        return undefined;
+      }
+      throw error;
+    }
+  },
+
+  /**
    * Get full chapter (surah) audio file for a reciter.
    * See: https://api-docs.quran.foundation/docs/content_apis_versioned/chapter-reciter-audio-file
    */

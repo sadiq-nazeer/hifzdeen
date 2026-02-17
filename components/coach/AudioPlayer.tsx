@@ -21,6 +21,8 @@ type AudioPlayerProps = {
   /** When set, preloads this URL and on current track end switches to it and calls onNext for gapless playback */
   nextAudioUrl?: string;
   onNext?: () => void;
+  /** Override displayed currentTime (e.g. cumulative time across multiple tracks) */
+  displayCurrentTime?: number;
   disabled?: boolean;
   showStopButton?: boolean;
   enableDragging?: boolean;
@@ -38,6 +40,7 @@ export const AudioPlayer = ({
   onTimeUpdate,
   nextAudioUrl,
   onNext,
+  displayCurrentTime,
   disabled = false,
   showStopButton = true,
   enableDragging = false,
@@ -108,7 +111,9 @@ export const AudioPlayer = ({
 
     const onLoadedMetadata = () => {
       syncTime();
+      // Don't override when durationSeconds was explicitly provided (e.g. full surah total)
       if (
+        durationSeconds <= 0 &&
         Number.isFinite(audio.duration) &&
         audio.duration > 0 &&
         !Number.isNaN(audio.duration)
@@ -161,7 +166,7 @@ export const AudioPlayer = ({
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handleEnded);
     };
-  }, [audioUrl, nextAudioUrl, onPlay, onPause, onEnded, onNext, onTimeUpdate]);
+  }, [audioUrl, durationSeconds, nextAudioUrl, onPlay, onPause, onEnded, onNext, onTimeUpdate]);
 
   const togglePlayPause = () => {
     if (disabled || !audioUrl) return;
@@ -239,9 +244,10 @@ export const AudioPlayer = ({
     return null;
   }
 
+  const displayTime = displayCurrentTime ?? currentTime;
   const progressRatio =
     effectiveDuration > 0
-      ? Math.max(0, Math.min(1, currentTime / effectiveDuration))
+      ? Math.max(0, Math.min(1, displayTime / effectiveDuration))
       : 0;
 
   return (
@@ -267,7 +273,7 @@ export const AudioPlayer = ({
       <div className="flex flex-wrap items-center gap-4 border-b border-white/5 px-4 py-3 sm:flex-nowrap">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <div className="audio-time-display flex shrink-0 items-center gap-1.5 rounded-xl bg-black/20 px-3 py-2 font-mono text-sm tabular-nums">
-            <span className="text-foreground">{formatTime(currentTime)}</span>
+            <span className="text-foreground">{formatTime(displayTime)}</span>
             <span className="text-foreground-muted">/</span>
             <span className="text-brand">
               {effectiveDuration > 0 ? formatTime(effectiveDuration) : "—"}
@@ -350,7 +356,7 @@ export const AudioPlayer = ({
               ref={progressBarRef}
               className="relative flex min-w-0 flex-1 cursor-pointer items-center py-1"
               role="progressbar"
-              aria-valuenow={currentTime}
+              aria-valuenow={displayTime}
               aria-valuemin={0}
               aria-valuemax={effectiveDuration}
               onClick={handleProgressClick}
@@ -383,7 +389,7 @@ export const AudioPlayer = ({
             <div
               className="h-1 w-full overflow-hidden rounded-full bg-white/10"
               role="progressbar"
-              aria-valuenow={currentTime}
+              aria-valuenow={displayTime}
               aria-valuemin={0}
               aria-valuemax={effectiveDuration}
             >
@@ -392,7 +398,7 @@ export const AudioPlayer = ({
                 style={{
                   width: `${Math.min(
                     100,
-                    (currentTime / effectiveDuration) * 100
+                    (displayTime / effectiveDuration) * 100
                   )}%`,
                 }}
               />
