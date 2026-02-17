@@ -28,18 +28,14 @@ export default function Home() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-12 px-6 py-16 lg:px-12">
       <header className="rounded-3xl border border-white/10 bg-surface-raised/80 px-8 py-10 header-glow backdrop-blur">
-        <p className="text-sm uppercase tracking-[0.3em] text-foreground-muted">
-          Quran.Foundation Candidate Project
-        </p>
-        <h1 className="mt-3 max-w-3xl text-4xl font-semibold leading-tight text-foreground sm:text-5xl">
-          hifzul
+        <h1 className="max-w-3xl text-4xl font-semibold leading-tight text-foreground sm:text-5xl">
+          HifzDeen
           </h1>
         <p className="mt-4 max-w-2xl text-lg text-foreground-muted">
-          Crafted to highlight sustainable engineering, immersive UX, and
-          rigorous documentation. Iteration 1 delivers the Interactive
-          Memorization & Recitation Coach while preparing study and narrative
-          extensions.
-          </p>
+          Sustainable engineering, immersive UX, and rigorous documentation.
+          Iteration 1 delivers the Interactive Memorization & Recitation Coach
+          while preparing study and narrative extensions.
+        </p>
         <div className="mt-8 flex flex-wrap gap-4">
           <Link
             href="/coach"

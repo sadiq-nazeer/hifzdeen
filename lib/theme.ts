@@ -20,8 +20,8 @@ export const ACCENT_OPTIONS: { id: AccentColor; label: string }[] = [
   { id: "indigo", label: "Indigo" },
 ];
 
-export const THEME_STORAGE_KEY = "hifzul-theme";
-export const ACCENT_STORAGE_KEY = "hifzul-accent";
+export const THEME_STORAGE_KEY = "hifzdeen-theme";
+export const ACCENT_STORAGE_KEY = "hifzdeen-accent";
 
 export function getStoredTheme(): ThemeMode {
   if (typeof window === "undefined") return "dark";

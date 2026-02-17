@@ -1,13 +1,7 @@
 import { Check, Ear, Mic } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CoachSessionVerse } from "@/lib/types/quran";
-
-const formatTime = (seconds: number): string => {
-  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-};
+import { AudioPlayer } from "./AudioPlayer";
 
 type VerseProgress = {
   listened: boolean;
@@ -72,24 +66,14 @@ export const VerseCard = ({ verse, progress, onProgressChange }: Props) => {
   const [showTranslation, setShowTranslation] = useState(false);
   const [showConfidence, setShowConfidence] = useState(false);
   const [showWhisperNotes, setShowWhisperNotes] = useState(false);
-  const [loopAudio, setLoopAudio] = useState(false);
+  const [loopAudio] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingWordKey, setPlayingWordKey] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
-  const [durationFromAudio, setDurationFromAudio] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const wordAudioRef = useRef<HTMLAudioElement | null>(null);
-  const progressBarRef = useRef<HTMLDivElement>(null);
-  const dragJustEndedRef = useRef(false);
   const audioUrl = verse.audio?.audio.url;
   const segments = verse.audio?.audio.segments;
   const apiDuration = verse.audio?.audio.durationSeconds ?? 0;
-  const effectiveDuration = !audioUrl
-    ? 0
-    : apiDuration > 0
-      ? apiDuration
-      : durationFromAudio;
 
   const apiWords =
     verse.verse.words?.filter(
@@ -99,47 +83,19 @@ export const VerseCard = ({ verse, progress, onProgressChange }: Props) => {
     apiWords.length > 0
       ? apiWords.map((word) => word.textUthmani)
       : splitVerseIntoWords(verse.verse.textUthmani);
+  
+  const effectiveDuration = !audioUrl
+    ? 0
+    : apiDuration > 0
+      ? apiDuration
+      : 0;
+  
   const activeWordIndex = getActiveWordIndex(
     currentTime,
     effectiveDuration,
     segments,
     verseWords.length
   );
-  const progressRatio =
-    effectiveDuration > 0
-      ? Math.max(0, Math.min(1, currentTime / effectiveDuration))
-      : 0;
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !audioUrl) return;
-    const syncTime = () => setCurrentTime(audio.currentTime);
-    const onLoadedMetadata = () => {
-      syncTime();
-      if (Number.isFinite(audio.duration) && audio.duration > 0 && !Number.isNaN(audio.duration)) {
-        setDurationFromAudio(audio.duration);
-      }
-    };
-    audio.addEventListener("timeupdate", syncTime);
-    audio.addEventListener("loadedmetadata", onLoadedMetadata);
-    return () => {
-      audio.removeEventListener("timeupdate", syncTime);
-      audio.removeEventListener("loadedmetadata", onLoadedMetadata);
-    };
-  }, [audioUrl]);
-
-  // High-frequency sync while playing so highlight and progress stay in sync with audio (~60fps)
-  useEffect(() => {
-    if (!isPlaying || !audioRef.current || !audioUrl) return;
-    let rafId: number;
-    const tick = () => {
-      const audio = audioRef.current;
-      if (audio) setCurrentTime(audio.currentTime);
-      rafId = requestAnimationFrame(tick);
-    };
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, [isPlaying, audioUrl]);
 
   useEffect(() => {
     return () => {
@@ -151,61 +107,24 @@ export const VerseCard = ({ verse, progress, onProgressChange }: Props) => {
     };
   }, []);
 
-  const togglePlayPause = () => {
-    const audio = audioRef.current;
-    if (!audio || !audioUrl) return;
-    if (isPlaying) {
-      audio.pause();
-      setIsPlaying(false);
-    } else {
-      audio.play().catch(() => setIsPlaying(false));
-      setIsPlaying(true);
-    }
-  };
-
-  const seekFromClientX = useCallback(
-    (clientX: number) => {
-      const bar = progressBarRef.current;
-      const audio = audioRef.current;
-      if (!bar || !audio || !audioUrl || effectiveDuration <= 0) return;
-      const rect = bar.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const pct = Math.max(0, Math.min(1, x / rect.width));
-      const seekTo = pct * effectiveDuration;
-      audio.currentTime = seekTo;
-      setCurrentTime(seekTo);
-    },
-    [audioUrl, effectiveDuration]
-  );
-
-  const seekFromClientXRef = useRef(seekFromClientX);
+  // High-frequency sync while playing so highlight stays in sync with audio (~60fps)
   useEffect(() => {
-    seekFromClientXRef.current = seekFromClientX;
-  }, [seekFromClientX]);
+    if (!isPlaying || !audioUrl) return;
+    let rafId: number;
+    const tick = () => {
+      // Time updates are handled by AudioPlayer component
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [isPlaying, audioUrl]);
 
-  const handleProgressClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (dragJustEndedRef.current) {
-      dragJustEndedRef.current = false;
-      return;
-    }
-    const audio = audioRef.current;
-    if (!audio || !audioUrl || effectiveDuration <= 0) return;
-    seekFromClientX(event.clientX);
-  };
 
-  const startDrag = (event: React.MouseEvent) => {
-    event.preventDefault();
-    if (!audioUrl || effectiveDuration <= 0) return;
-    setIsDragging(true);
-  };
-
-  const playWordAudio = useCallback((wordAudioUrl?: string, wordKey?: string) => {
+  const playWordAudio = (wordAudioUrl?: string, wordKey?: string) => {
     if (!wordAudioUrl || !wordKey) return;
 
-    const verseAudio = audioRef.current;
-    if (verseAudio && !verseAudio.paused) {
-      verseAudio.pause();
-    }
+    // Pause main audio when playing word audio
+    setIsPlaying(false);
 
     const previousWordAudio = wordAudioRef.current;
     if (previousWordAudio) {
@@ -220,22 +139,7 @@ export const VerseCard = ({ verse, progress, onProgressChange }: Props) => {
     player.onended = () => setPlayingWordKey(null);
     player.onerror = () => setPlayingWordKey(null);
     player.play().catch(() => setPlayingWordKey(null));
-  }, []);
-
-  useEffect(() => {
-    if (!isDragging) return;
-    const onMove = (e: MouseEvent) => seekFromClientXRef.current(e.clientX);
-    const onUp = () => {
-      setIsDragging(false);
-      dragJustEndedRef.current = true;
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, [isDragging]);
+  };
 
   return (
     <article className="min-w-0 overflow-hidden space-y-4 rounded-3xl border border-white/5 bg-surface-raised/50 p-6">
@@ -255,98 +159,17 @@ export const VerseCard = ({ verse, progress, onProgressChange }: Props) => {
           Listen loop
         </p>
         {audioUrl ? (
-          <>
-            <audio
-              ref={audioRef}
-              loop={loopAudio}
-              src={audioUrl}
-              className="hidden"
-              onEnded={() => setIsPlaying(false)}
-              onPause={() => setIsPlaying(false)}
-              onPlay={() => setIsPlaying(true)}
-            />
-            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/5 bg-black/20 px-3 py-2">
-              <button
-                type="button"
-                className="play-btn-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-black shadow-lg shadow-brand/25 transition hover:brightness-110"
-                onClick={togglePlayPause}
-                aria-label={isPlaying ? "Pause" : "Play"}
-              >
-                {isPlaying ? (
-                  <span className="text-sm font-bold">‖</span>
-                ) : (
-                  <span className="ml-0.5 text-sm font-bold">▶</span>
-                )}
-              </button>
-              <button
-                type="button"
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition ${
-                  loopAudio
-                    ? "border-brand bg-brand/20 text-brand"
-                    : "border-white/20 bg-white/5 text-foreground-muted hover:border-white/30 hover:bg-white/10 hover:text-foreground"
-                }`}
-                onClick={() => setLoopAudio((prev) => !prev)}
-                aria-label={loopAudio ? "Loop on" : "Loop off"}
-                title={loopAudio ? "Loop on" : "Loop off"}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
-                >
-                  <path d="M17 1l4 4-4 4" />
-                  <path d="M3 11V9a4 4 0 0 1 4-4h14" />
-                  <path d="M7 23l-4-4 4-4" />
-                  <path d="M21 13v2a4 4 0 0 1-4 4H3" />
-                </svg>
-              </button>
-              <div className="audio-time-display flex shrink-0 items-center gap-1.5 font-mono text-sm tabular-nums">
-                <span className="text-foreground">{formatTime(currentTime)}</span>
-                <span className="text-foreground-muted">/</span>
-                <span className="text-brand">{formatTime(effectiveDuration)}</span>
-              </div>
-              <div
-                ref={progressBarRef}
-                className="relative flex min-w-0 flex-1 cursor-pointer items-center py-1"
-                role="progressbar"
-                aria-valuenow={currentTime}
-                aria-valuemin={0}
-                aria-valuemax={effectiveDuration}
-                onClick={handleProgressClick}
-                onMouseDown={startDrag}
-              >
-                <div className="relative h-1.5 w-full rounded-full bg-white/10 transition hover:bg-white/15">
-                  <div
-                    className="absolute inset-0 h-full w-full origin-left rounded-full bg-brand"
-                    style={{
-                      transform: `scaleX(${progressRatio})`,
-                    }}
-                  />
-                  <div
-                    className="absolute top-1/2 z-10 cursor-grab rounded-full bg-brand shadow-md shadow-brand/40 ring-2 ring-white/20 transition hover:scale-110 active:cursor-grabbing"
-                    style={{
-                      left: `${progressRatio * 100}%`,
-                      transform: "translate(-50%, -50%)",
-                      width: "18px",
-                      height: "18px",
-                    }}
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      startDrag(e);
-                    }}
-                    aria-hidden
-                  />
-                </div>
-              </div>
-            </div>
-          </>
+          <AudioPlayer
+            audioUrl={audioUrl}
+            durationSeconds={apiDuration}
+            loop={loopAudio}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+            onEnded={() => setIsPlaying(false)}
+            onTimeUpdate={setCurrentTime}
+            showStopButton={false}
+            enableDragging={true}
+          />
         ) : (
           <p className="text-sm text-foreground-muted">
             Audio not available for this selection.

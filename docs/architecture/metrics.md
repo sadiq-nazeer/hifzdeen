@@ -20,5 +20,5 @@
 ### Next Steps
 
 1. Implement metrics scaffolding alongside the memorization coach UI.
-2. Export summarized metrics into `docs/product/assessment-report.md` for the application package.
+2. Export summarized metrics into `docs/product/project-report.md` for the application package.
 

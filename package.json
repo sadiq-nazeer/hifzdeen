@@ -1,5 +1,5 @@
 {
-  "name": "hifzul",
+  "name": "hifzdeen",
   "version": "0.1.0",
   "description": "Interactive memorization and reflection experience powered by Quran.Foundation APIs.",
   "private": true,
@@ -10,6 +10,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "analyze": "ANALYZE=1 next build"
   },
   "dependencies": {
@@ -28,6 +30,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.0.3",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }

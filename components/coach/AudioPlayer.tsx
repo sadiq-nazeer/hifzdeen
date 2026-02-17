@@ -1,0 +1,364 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+
+const formatTime = (seconds: number): string => {
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+};
+
+type AudioPlayerProps = {
+  audioUrl: string;
+  durationSeconds?: number;
+  loop?: boolean;
+  onPlay?: () => void;
+  onPause?: () => void;
+  onEnded?: () => void;
+  onStop?: () => void;
+  onTimeUpdate?: (currentTime: number) => void;
+  disabled?: boolean;
+  showStopButton?: boolean;
+  enableDragging?: boolean;
+  className?: string;
+};
+
+export const AudioPlayer = ({
+  audioUrl,
+  durationSeconds = 0,
+  loop = false,
+  onPlay,
+  onPause,
+  onEnded,
+  onStop,
+  onTimeUpdate,
+  disabled = false,
+  showStopButton = true,
+  enableDragging = false,
+  className = "",
+}: AudioPlayerProps) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [loopSelection, setLoopSelection] = useState(loop);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [trackDurationFromAudio, setTrackDurationFromAudio] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const progressBarRef = useRef<HTMLDivElement>(null);
+  const dragJustEndedRef = useRef(false);
+
+  const effectiveDuration =
+    durationSeconds > 0 ? durationSeconds : trackDurationFromAudio;
+
+  // Sync loop prop with internal state
+  useEffect(() => {
+    setLoopSelection(loop);
+  }, [loop]);
+
+  // Sync audio element source
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !audioUrl) return;
+    audio.src = audioUrl;
+    audio.loop = loopSelection;
+    audio.load();
+  }, [audioUrl, loopSelection]);
+
+  // Handle play/pause state
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !audioUrl) return;
+
+    if (isPlaying) {
+      audio.play().catch(() => {
+        setIsPlaying(false);
+        onPause?.();
+      });
+    } else {
+      audio.pause();
+    }
+  }, [isPlaying, audioUrl, onPause]);
+
+  // Sync time updates
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !audioUrl) return;
+
+    const syncTime = () => {
+      const time = audio.currentTime;
+      setCurrentTime(time);
+      onTimeUpdate?.(time);
+    };
+
+    const onLoadedMetadata = () => {
+      syncTime();
+      if (
+        Number.isFinite(audio.duration) &&
+        audio.duration > 0 &&
+        !Number.isNaN(audio.duration)
+      ) {
+        setTrackDurationFromAudio(audio.duration);
+      }
+    };
+
+    const handlePlay = () => {
+      setIsPlaying(true);
+      onPlay?.();
+    };
+
+    const handlePause = () => {
+      setIsPlaying(false);
+      onPause?.();
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      onEnded?.();
+    };
+
+    audio.addEventListener("timeupdate", syncTime);
+    audio.addEventListener("loadedmetadata", onLoadedMetadata);
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("pause", handlePause);
+    audio.addEventListener("ended", handleEnded);
+
+    return () => {
+      audio.removeEventListener("timeupdate", syncTime);
+      audio.removeEventListener("loadedmetadata", onLoadedMetadata);
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("ended", handleEnded);
+    };
+  }, [audioUrl, onPlay, onPause, onEnded, onTimeUpdate]);
+
+  const togglePlayPause = () => {
+    if (disabled || !audioUrl) return;
+    setIsPlaying((prev) => !prev);
+  };
+
+  const stopPlayback = () => {
+    setIsPlaying(false);
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    setCurrentTime(0);
+    onStop?.();
+  };
+
+  const toggleLoop = () => {
+    if (disabled) return;
+    setLoopSelection((prev) => !prev);
+  };
+
+  const seekFromClientX = useCallback(
+    (clientX: number) => {
+      const bar = progressBarRef.current;
+      const audio = audioRef.current;
+      if (!bar || !audio || !audioUrl || effectiveDuration <= 0) return;
+      const rect = bar.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const pct = Math.max(0, Math.min(1, x / rect.width));
+      const seekTo = pct * effectiveDuration;
+      audio.currentTime = seekTo;
+      setCurrentTime(seekTo);
+    },
+    [audioUrl, effectiveDuration]
+  );
+
+  const seekFromClientXRef = useRef(seekFromClientX);
+  useEffect(() => {
+    seekFromClientXRef.current = seekFromClientX;
+  }, [seekFromClientX]);
+
+  const handleProgressClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!enableDragging) return;
+    if (dragJustEndedRef.current) {
+      dragJustEndedRef.current = false;
+      return;
+    }
+    seekFromClientX(event.clientX);
+  };
+
+  const startDrag = (event: React.MouseEvent) => {
+    if (!enableDragging) return;
+    event.preventDefault();
+    if (!audioUrl || effectiveDuration <= 0) return;
+    setIsDragging(true);
+  };
+
+  useEffect(() => {
+    if (!enableDragging || !isDragging) return;
+    const onMove = (e: MouseEvent) => seekFromClientXRef.current(e.clientX);
+    const onUp = () => {
+      setIsDragging(false);
+      dragJustEndedRef.current = true;
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [enableDragging, isDragging]);
+
+  if (!audioUrl) {
+    return null;
+  }
+
+  const progressRatio =
+    effectiveDuration > 0
+      ? Math.max(0, Math.min(1, currentTime / effectiveDuration))
+      : 0;
+
+  return (
+    <div className={`audio-player-panel overflow-hidden rounded-2xl border border-brand/25 bg-gradient-to-br from-surface-muted/90 via-surface-muted/70 to-brand/5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] text-sm ${className}`}>
+      <audio
+        ref={audioRef}
+        className="hidden"
+        onError={() => {
+          setIsPlaying(false);
+        }}
+      />
+      
+      {/* Transport bar: time display + play controls */}
+      <div className="flex flex-wrap items-center gap-4 border-b border-white/5 px-4 py-3 sm:flex-nowrap">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="audio-time-display flex shrink-0 items-center gap-1.5 rounded-xl bg-black/20 px-3 py-2 font-mono text-sm tabular-nums">
+            <span className="text-foreground">{formatTime(currentTime)}</span>
+            <span className="text-foreground-muted">/</span>
+            <span className="text-brand">
+              {effectiveDuration > 0 ? formatTime(effectiveDuration) : "—"}
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:flex-shrink-0">
+          <button
+            type="button"
+            className="play-btn-primary order-first flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-black shadow-lg shadow-brand/25 transition hover:brightness-110 disabled:opacity-50 disabled:hover:brightness-100"
+            onClick={togglePlayPause}
+            disabled={disabled}
+            aria-label={isPlaying ? "Pause" : "Play"}
+          >
+            {isPlaying ? (
+              <span className="text-sm font-bold">‖</span>
+            ) : (
+              <span className="ml-0.5 text-sm font-bold">▶</span>
+            )}
+          </button>
+          <button
+            type="button"
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition disabled:opacity-50 ${
+              loopSelection
+                ? "border-brand bg-brand/20 text-brand"
+                : "border-white/20 bg-white/5 text-foreground-muted hover:border-white/30 hover:bg-white/10 hover:text-foreground"
+            }`}
+            onClick={toggleLoop}
+            disabled={disabled}
+            aria-label={loopSelection ? "Loop on" : "Loop off"}
+            title={loopSelection ? "Loop on" : "Loop off"}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M17 1l4 4-4 4" />
+              <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+              <path d="M7 23l-4-4 4-4" />
+              <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+            </svg>
+          </button>
+          {showStopButton && (
+            <button
+              type="button"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/20 bg-white/5 text-foreground-muted transition hover:border-white/30 hover:bg-white/10 hover:text-foreground disabled:opacity-50"
+              onClick={stopPlayback}
+              disabled={disabled}
+              aria-label="Stop"
+              title="Stop"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden
+              >
+                <rect x="6" y="6" width="12" height="12" rx="1" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      {effectiveDuration > 0 && (
+        <div className="px-4 pb-2 pt-0">
+          {enableDragging ? (
+            <div
+              ref={progressBarRef}
+              className="relative flex min-w-0 flex-1 cursor-pointer items-center py-1"
+              role="progressbar"
+              aria-valuenow={currentTime}
+              aria-valuemin={0}
+              aria-valuemax={effectiveDuration}
+              onClick={handleProgressClick}
+              onMouseDown={startDrag}
+            >
+              <div className="relative h-1.5 w-full rounded-full bg-white/10 transition hover:bg-white/15">
+                <div
+                  className="absolute inset-0 h-full w-full origin-left rounded-full bg-brand"
+                  style={{
+                    transform: `scaleX(${progressRatio})`,
+                  }}
+                />
+                <div
+                  className="absolute top-1/2 z-10 cursor-grab rounded-full bg-brand shadow-md shadow-brand/40 ring-2 ring-white/20 transition hover:scale-110 active:cursor-grabbing"
+                  style={{
+                    left: `${progressRatio * 100}%`,
+                    transform: "translate(-50%, -50%)",
+                    width: "18px",
+                    height: "18px",
+                  }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    startDrag(e);
+                  }}
+                  aria-hidden
+                />
+              </div>
+            </div>
+          ) : (
+            <div
+              className="h-1 w-full overflow-hidden rounded-full bg-white/10"
+              role="progressbar"
+              aria-valuenow={currentTime}
+              aria-valuemin={0}
+              aria-valuemax={effectiveDuration}
+            >
+              <div
+                className="h-full rounded-full bg-brand transition-[width] duration-150 ease-out"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    (currentTime / effectiveDuration) * 100
+                  )}%`,
+                }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};

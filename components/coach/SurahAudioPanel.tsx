@@ -1,11 +1,12 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   useChapterAudioPlaylist,
   type ChapterAudioEntry,
 } from "@/lib/hooks/useChapterAudioPlaylist";
 import type { CoachSessionVerse } from "@/lib/types/quran";
+import { AudioPlayer } from "./AudioPlayer";
 
 type PlaybackScope = "session" | "surah";
 
@@ -58,16 +59,6 @@ const formatDuration = (seconds: number): string => {
   return `${mins}m ${secs.toString().padStart(2, "0")}s`;
 };
 
-const formatTime = (seconds: number): string => {
-  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-};
-
-/** Play was aborted because we changed source/load; do not treat as user-visible error. */
-const isPlayAbortError = (err: unknown): boolean =>
-  err instanceof Error && err.name === "AbortError";
 
 export const SurahAudioPanel = ({
   sessionVerses,
@@ -84,12 +75,7 @@ export const SurahAudioPanel = ({
     useState<CurrentAyahHighlight>("brand");
   const [surahPage, setSurahPage] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [loopSelection, setLoopSelection] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [trackDurationFromAudio, setTrackDurationFromAudio] = useState(0);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const lastLoadedSrcRef = useRef<string>("");
+  const [loopSelection] = useState(false);
 
   const scrollToRangeSection = () => {
     document.getElementById("session-range")?.scrollIntoView({ behavior: "smooth" });
@@ -136,95 +122,16 @@ export const SurahAudioPanel = ({
   );
   const currentTrack = activePlaylist[currentIndex];
   const currentAudioUrl = currentTrack?.audioUrl?.trim() ?? "";
-  const hasValidSource = currentAudioUrl.length > 0;
   const apiTrackDuration = currentTrack?.durationSeconds ?? 0;
-  const effectiveTrackDuration =
-    apiTrackDuration > 0 ? apiTrackDuration : trackDurationFromAudio;
+  const effectiveTrackDuration = apiTrackDuration;
 
   useEffect(() => {
     setCurrentIndex(0);
-    setIsPlaying(false);
-    setCurrentTime(0);
-    setTrackDurationFromAudio(0);
-    lastLoadedSrcRef.current = "";
     if (scope === "session") {
       setFullSurahTextView(false);
       setSurahPage(0);
     }
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
-      audio.currentTime = 0;
-    }
   }, [playlistSignature, scope]);
-
-  // Keep audio element source in sync and call load() so the element has a supported source before play()
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || lastLoadedSrcRef.current === currentAudioUrl) {
-      return;
-    }
-    lastLoadedSrcRef.current = currentAudioUrl;
-    if (!currentAudioUrl) {
-      audio.removeAttribute("src");
-      audio.load();
-      return;
-    }
-    audio.pause();
-    audio.src = currentAudioUrl;
-    audio.load();
-  }, [currentAudioUrl]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !hasValidSource) {
-      return;
-    }
-    if (!isPlaying) {
-      audio.pause();
-      return;
-    }
-    const play = async () => {
-      try {
-        await audio.play();
-      } catch (error) {
-        if (isPlayAbortError(error)) {
-          return;
-        }
-        console.error("Failed to start playback", error);
-        setIsPlaying(false);
-      }
-    };
-    void play();
-  }, [currentAudioUrl, hasValidSource, isPlaying]);
-
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const syncTime = () => setCurrentTime(audio.currentTime);
-    const onLoadedMetadata = () => {
-      syncTime();
-      if (
-        Number.isFinite(audio.duration) &&
-        audio.duration > 0 &&
-        !Number.isNaN(audio.duration)
-      ) {
-        setTrackDurationFromAudio(audio.duration);
-      }
-    };
-    audio.addEventListener("timeupdate", syncTime);
-    audio.addEventListener("loadedmetadata", onLoadedMetadata);
-    return () => {
-      audio.removeEventListener("timeupdate", syncTime);
-      audio.removeEventListener("loadedmetadata", onLoadedMetadata);
-    };
-  }, [currentAudioUrl]);
-
-  useEffect(() => {
-    if (!currentAudioUrl) setTrackDurationFromAudio(0);
-  }, [currentAudioUrl]);
 
   const surahTotalPages = Math.max(
     1,
@@ -260,32 +167,6 @@ export const SurahAudioPanel = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- fixed-length primitive deps to avoid "dependency array changed size" error
   }, [isSurahScope, fullSurahTextView, currentTrackVerseKey, playlistSignature]);
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) {
-      return;
-    }
-    const handleEnded = () => {
-      if (!activePlaylist.length) {
-        setIsPlaying(false);
-        return;
-      }
-      setCurrentIndex((prev) => {
-        const nextIndex = prev + 1;
-        if (nextIndex < activePlaylist.length) {
-          return nextIndex;
-        }
-        if (loopSelection) {
-          return 0;
-        }
-        setIsPlaying(false);
-        return prev;
-      });
-    };
-
-    audio.addEventListener("ended", handleEnded);
-    return () => audio.removeEventListener("ended", handleEnded);
-  }, [activePlaylist.length, loopSelection]);
 
   useEffect(() => {
     if (
@@ -299,48 +180,6 @@ export const SurahAudioPanel = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePlaylist.length]);
 
-  const togglePlayPause = async () => {
-    const audio = audioRef.current;
-    if (!audio || !currentTrack || !hasValidSource) {
-      return;
-    }
-
-    if (isPlaying) {
-      audio.pause();
-      setIsPlaying(false);
-      return;
-    }
-
-    try {
-      await audio.play();
-      setIsPlaying(true);
-    } catch (error) {
-      if (isPlayAbortError(error)) {
-        return;
-      }
-      console.error("Unable to begin playback", error);
-      setIsPlaying(false);
-    }
-  };
-
-  const restartPlayback = () => {
-    if (!activePlaylist.length) {
-      return;
-    }
-    setCurrentIndex(0);
-    const audio = audioRef.current;
-    if (audio) {
-      audio.currentTime = 0;
-      if (isPlaying) {
-        audio.play().catch((err: unknown) => {
-          if (!isPlayAbortError(err)) {
-            console.error("Restart playback failed", err);
-            setIsPlaying(false);
-          }
-        });
-      }
-    }
-  };
 
   const nextLabel =
     activePlaylist.length > 0
@@ -437,79 +276,46 @@ export const SurahAudioPanel = ({
       )}
 
       {activePlaylist.length > 0 && (
-        <div className="audio-player-panel mt-4 overflow-hidden rounded-2xl border border-brand/25 bg-gradient-to-br from-surface-muted/90 via-surface-muted/70 to-brand/5 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] text-sm">
-          {/* Transport bar: time display + play controls */}
-          <div className="flex flex-wrap items-center gap-4 border-b border-white/5 px-4 py-3 sm:flex-nowrap">
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <div className="audio-time-display flex shrink-0 items-center gap-1.5 rounded-xl bg-black/20 px-3 py-2 font-mono text-sm tabular-nums">
-                <span className="text-foreground">{formatTime(currentTime)}</span>
-                <span className="text-foreground-muted">/</span>
-                <span className="text-brand">
-                  {effectiveTrackDuration > 0
-                    ? formatTime(effectiveTrackDuration)
-                    : "—"}
-                </span>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-medium text-foreground-muted">
-                  {nextLabel}
-                </p>
-                <p className="truncate text-xs text-foreground/80">
-                  Queue: {activePlaylist.length} ayat · ~{formatDuration(totalDuration)}
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 sm:flex-shrink-0">
-              <button
-                type="button"
-                className="play-btn-primary order-first rounded-full bg-brand px-5 py-2.5 text-sm font-semibold text-black shadow-lg shadow-brand/25 transition hover:brightness-110 hover:shadow-brand/30 disabled:opacity-50 disabled:hover:brightness-100 disabled:hover:shadow-brand/25"
-                onClick={togglePlayPause}
+        <div>
+          {currentAudioUrl && (
+            <div className="mt-4">
+              <AudioPlayer
+                audioUrl={currentAudioUrl}
+                durationSeconds={effectiveTrackDuration}
+                loop={loopSelection}
+                onPlay={() => {}}
+                onPause={() => {}}
+                onStop={() => {
+                  setCurrentIndex(0);
+                }}
+                onEnded={() => {
+                  if (!activePlaylist.length) {
+                    return;
+                  }
+                  setCurrentIndex((prev) => {
+                    const nextIndex = prev + 1;
+                    if (nextIndex < activePlaylist.length) {
+                      return nextIndex;
+                    }
+                    if (loopSelection) {
+                      return 0;
+                    }
+                    return prev;
+                  });
+                }}
                 disabled={disablePanel}
-              >
-                {isPlaying ? "Pause" : "Play"}
-              </button>
-              <button
-                type="button"
-                className="rounded-full border border-white/15 bg-white/5 px-4 py-2.5 text-xs font-semibold text-foreground transition hover:border-brand/40 hover:bg-brand/10 hover:text-brand disabled:opacity-50"
-                onClick={restartPlayback}
-                disabled={disablePanel}
-              >
-                Restart
-              </button>
-              <button
-                type="button"
-                className={`rounded-full border px-4 py-2.5 text-xs font-semibold transition disabled:opacity-50 ${
-                  loopSelection
-                    ? "border-brand/50 bg-brand/20 text-brand"
-                    : "border-white/15 bg-white/5 text-foreground hover:border-brand/40 hover:bg-brand/10 hover:text-brand"
-                }`}
-                onClick={() => setLoopSelection((prev) => !prev)}
-                disabled={disablePanel}
-              >
-                {loopSelection ? "Loop ✓" : "Loop"}
-              </button>
-            </div>
-          </div>
-
-          {/* Progress bar for current ayah */}
-          {currentTrack && effectiveTrackDuration > 0 && (
-            <div className="px-4 pb-2 pt-0">
-              <div
-                className="h-1 w-full overflow-hidden rounded-full bg-white/10"
-                role="progressbar"
-                aria-valuenow={currentTime}
-                aria-valuemin={0}
-                aria-valuemax={effectiveTrackDuration}
-              >
-                <div
-                  className="h-full rounded-full bg-brand transition-[width] duration-150 ease-out"
-                  style={{
-                    width: `${Math.min(
-                      100,
-                      (currentTime / effectiveTrackDuration) * 100
-                    )}%`,
-                  }}
-                />
+                showStopButton={true}
+                enableDragging={false}
+              />
+              <div className="mt-3 px-4">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-medium text-foreground-muted">
+                    {nextLabel}
+                  </p>
+                  <p className="truncate text-xs text-foreground/80">
+                    Queue: {activePlaylist.length} ayat · ~{formatDuration(totalDuration)}
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -540,29 +346,6 @@ export const SurahAudioPanel = ({
                         {opt.label}
                       </button>
                     ))}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={safeSurahPage <= 0}
-                      className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-white/5"
-                      onClick={() => setSurahPage((p) => Math.max(0, p - 1))}
-                    >
-                      Previous
-                    </button>
-                    <span className="text-xs tabular-nums text-foreground-muted">
-                      Page {safeSurahPage + 1} of {surahTotalPages}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={safeSurahPage >= surahTotalPages - 1}
-                      className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-white/5"
-                      onClick={() =>
-                        setSurahPage((p) => Math.min(surahTotalPages - 1, p + 1))
-                      }
-                    >
-                      Next
-                    </button>
                   </div>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-surface-muted/30 p-5">
@@ -602,6 +385,29 @@ export const SurahAudioPanel = ({
                     Now playing: Ayah {currentTrack.orderInChapter}
                   </p>
                 )}
+                <div className="mt-3 flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    disabled={safeSurahPage <= 0}
+                    className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-white/5"
+                    onClick={() => setSurahPage((p) => Math.max(0, p - 1))}
+                  >
+                    Previous
+                  </button>
+                  <span className="text-xs tabular-nums text-foreground-muted">
+                    Page {safeSurahPage + 1} of {surahTotalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={safeSurahPage >= surahTotalPages - 1}
+                    className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-white/5"
+                    onClick={() =>
+                      setSurahPage((p) => Math.min(surahTotalPages - 1, p + 1))
+                    }
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             ) : (
               <div>
@@ -621,7 +427,7 @@ export const SurahAudioPanel = ({
                 </div>
               </div>
             )}
-          </div>
+          </div>  
         </div>
       )}
 
@@ -632,15 +438,6 @@ export const SurahAudioPanel = ({
         </p>
       )}
 
-      {activePlaylist.length > 0 ? (
-        <audio
-          ref={audioRef}
-          className="hidden"
-          onError={() => {
-            setIsPlaying(false);
-          }}
-        />
-      ) : null}
     </section>
   );
 };

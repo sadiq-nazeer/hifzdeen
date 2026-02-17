@@ -44,21 +44,11 @@ export default function VisionPage() {
           Vision Brief
         </p>
         <h1 className="text-4xl font-semibold text-foreground">
-          hifzul
+          HifzDeen
         </h1>
         <p className="text-lg text-foreground-muted">
-          A multi-iteration initiative answering the Quran.Foundation Full-Stack
-          Engineer brief by emphasizing sustainable improvements, delightful UX,
-          and system-wide learning (
-          <a
-            className="text-brand hover:text-brand-accent"
-            href="https://quran.foundation/careers/full-stack-engineer"
-            target="_blank"
-            rel="noreferrer"
-          >
-            source
-          </a>
-          ).
+          A multi-iteration initiative emphasizing sustainable improvements,
+          delightful UX, and system-wide learning.
         </p>
       </header>
 
@@ -91,10 +81,6 @@ export default function VisionPage() {
         ))}
       </section>
 
-      <p className="text-xs text-foreground-muted">
-        Built for the Quran.Foundation Full-Stack Engineer applicant
-        assessment.
-      </p>
     </main>
   );
 }

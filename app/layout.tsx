@@ -20,19 +20,19 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "hifzul",
+  title: "HifzDeen",
   description:
     "An immersive memorization and recitation coach built with Quran.Foundation APIs.",
   metadataBase: new URL("https://quranic-practice.local"),
   openGraph: {
-    title: "hifzul",
+    title: "HifzDeen",
     description:
       "Adaptive memorization journeys powered by Quran.Foundation data.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "hifzul",
+    title: "HifzDeen",
     description:
       "Interactive memorization and reflection journeys for the Quran.",
   },
@@ -50,7 +50,7 @@ export default function RootLayout({
       >
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var t=localStorage.getItem('hifzul-theme');var a=localStorage.getItem('hifzul-accent');var r=t==='light'?'light':'dark';document.documentElement.setAttribute('data-theme',r);document.documentElement.setAttribute('data-accent',a||'green');})();`,
+            __html: `(function(){var t=localStorage.getItem('hifzdeen-theme');var a=localStorage.getItem('hifzdeen-accent');var r=t==='light'?'light':'dark';document.documentElement.setAttribute('data-theme',r);document.documentElement.setAttribute('data-accent',a||'green');})();`,
           }}
         />
         <ThemeProvider>

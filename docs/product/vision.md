@@ -1,7 +1,7 @@
-## Vision: hifzul
+## Vision: HifzDeen
 
 ### Mission Alignment
-- Anchor on Quran.Foundation’s call for engineers who enhance existing systems, prioritize sustainability, and document rigorously, ensuring this project showcases those strengths.[^role]
+- Enhance existing systems, prioritize sustainability, and document rigorously so this project and its successors can amplify impact.
 - Support millions of seekers by emphasizing accessibility-first interactions, energy-aware design choices, and maintainable architecture over flashy but brittle experiments.
 
 ### Iterative Experience Pillars
@@ -21,6 +21,3 @@
 - Demonstrate seamless OAuth2 integration with Quran.Foundation APIs, including responsible token lifecycle handling.
 - Showcase one polished memorization pathway end-to-end (selection → coaching loop → reflection spark) with instrumentation for future optimization.
 - Provide a visible roadmap trailhead in `README.md` communicating how subsequent study and narrative iterations will build on the same core.
-
-[^role]: https://quran.foundation/careers/full-stack-engineer
-
