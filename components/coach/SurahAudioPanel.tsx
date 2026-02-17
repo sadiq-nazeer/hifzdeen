@@ -96,14 +96,17 @@ export const SurahAudioPanel = ({
   );
 
   const isSurahScope = scope === "surah";
+  const [fullSurahCurrentTime, setFullSurahCurrentTime] = useState(0);
   const {
     playlist: surahPlaylist,
+    fullSurahAudio,
     isLoading: isLoadingSurah,
     isError: surahError,
     error: surahErrorDetail,
   } = useChapterAudioPlaylist({
     chapterId: isSurahScope ? chapterId : undefined,
     reciterId,
+    fullSurah: isSurahScope,
     enabled: isSurahScope,
   });
 
@@ -120,13 +123,37 @@ export const SurahAudioPanel = ({
       ),
     [activePlaylist],
   );
-  const currentTrack = activePlaylist[currentIndex];
-  const currentAudioUrl = currentTrack?.audioUrl?.trim() ?? "";
-  const apiTrackDuration = currentTrack?.durationSeconds ?? 0;
-  const effectiveTrackDuration = apiTrackDuration;
+
+  /** When playing full-surah file, derive current verse from timestamps. */
+  const fullSurahCurrentVerseKey = useMemo(() => {
+    if (!fullSurahAudio?.timestamps?.length || fullSurahCurrentTime == null) {
+      return null;
+    }
+    const tMs = fullSurahCurrentTime * 1000;
+    const entry = fullSurahAudio.timestamps.find(
+      (t) => tMs >= t.fromMs && tMs < t.toMs,
+    );
+    return entry?.verseKey ?? null;
+  }, [fullSurahAudio?.timestamps, fullSurahCurrentTime]);
+
+  const useFullSurahPlayback = Boolean(isSurahScope && fullSurahAudio?.audioUrl);
+  const currentTrackByIndex = activePlaylist[currentIndex];
+  const currentTrackFromTimestamp =
+    fullSurahCurrentVerseKey != null
+      ? activePlaylist.find((e) => e.verseKey === fullSurahCurrentVerseKey) ?? null
+      : null;
+  const currentTrack = useFullSurahPlayback
+    ? currentTrackFromTimestamp
+    : currentTrackByIndex;
+  const currentAudioUrl = useFullSurahPlayback
+    ? fullSurahAudio!.audioUrl
+    : (currentTrackByIndex?.audioUrl?.trim() ?? "");
+  const apiTrackDuration = currentTrackByIndex?.durationSeconds ?? 0;
+  const effectiveTrackDuration = useFullSurahPlayback ? 0 : apiTrackDuration;
 
   useEffect(() => {
     setCurrentIndex(0);
+    setFullSurahCurrentTime(0);
     if (scope === "session") {
       setFullSurahTextView(false);
       setSurahPage(0);
@@ -196,8 +223,11 @@ export const SurahAudioPanel = ({
       },
     ];
 
+  const hasSurahPlayback =
+    isSurahScope && (Boolean(fullSurahAudio?.audioUrl) || activePlaylist.length > 0);
   const disablePanel =
-    (isSurahScope && (!chapterId || surahError)) || activePlaylist.length === 0;
+    (isSurahScope && (!chapterId || surahError || !hasSurahPlayback)) ||
+    (!isSurahScope && activePlaylist.length === 0);
 
   return (
     <section className="rounded-3xl border border-white/10 bg-surface-raised/80 p-6 shadow-sm">
@@ -275,7 +305,7 @@ export const SurahAudioPanel = ({
         </p>
       )}
 
-      {activePlaylist.length > 0 && (
+      {(activePlaylist.length > 0 || (useFullSurahPlayback && fullSurahAudio?.audioUrl)) && (
         <div>
           {currentAudioUrl && (
             <div className="mt-4">
@@ -283,37 +313,62 @@ export const SurahAudioPanel = ({
                 audioUrl={currentAudioUrl}
                 durationSeconds={effectiveTrackDuration}
                 loop={loopSelection}
+                nextAudioUrl={
+                  useFullSurahPlayback
+                    ? undefined
+                    : activePlaylist.length > 0 && currentIndex + 1 < activePlaylist.length
+                      ? activePlaylist[currentIndex + 1].audioUrl
+                      : loopSelection
+                        ? activePlaylist[0]?.audioUrl
+                        : undefined
+                }
+                onNext={
+                  useFullSurahPlayback
+                    ? undefined
+                    : () => {
+                        if (!activePlaylist.length) return;
+                        setCurrentIndex((prev) => {
+                          const nextIndex = prev + 1;
+                          if (nextIndex < activePlaylist.length) return nextIndex;
+                          if (loopSelection) return 0;
+                          return prev;
+                        });
+                      }
+                }
                 onPlay={() => {}}
                 onPause={() => {}}
+                onTimeUpdate={useFullSurahPlayback ? setFullSurahCurrentTime : undefined}
                 onStop={() => {
                   setCurrentIndex(0);
+                  setFullSurahCurrentTime(0);
                 }}
                 onEnded={() => {
-                  if (!activePlaylist.length) {
+                  if (useFullSurahPlayback) {
+                    setFullSurahCurrentTime(0);
                     return;
                   }
-                  setCurrentIndex((prev) => {
-                    const nextIndex = prev + 1;
-                    if (nextIndex < activePlaylist.length) {
-                      return nextIndex;
-                    }
-                    if (loopSelection) {
-                      return 0;
-                    }
-                    return prev;
-                  });
+                  if (!activePlaylist.length) return;
+                  const hasNext =
+                    currentIndex + 1 < activePlaylist.length || loopSelection;
+                  if (!hasNext) {
+                    setCurrentIndex((prev) => prev);
+                  }
                 }}
                 disabled={disablePanel}
                 showStopButton={true}
-                enableDragging={false}
+                enableDragging={true}
               />
               <div className="mt-3 px-4">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-medium text-foreground-muted">
-                    {nextLabel}
+                    {useFullSurahPlayback
+                      ? `Full surah${currentTrack ? ` · Ayah ${currentTrack.orderInChapter}` : ""}`
+                      : nextLabel}
                   </p>
                   <p className="truncate text-xs text-foreground/80">
-                    Queue: {activePlaylist.length} ayat · ~{formatDuration(totalDuration)}
+                    {useFullSurahPlayback
+                      ? "Single file · continuous playback"
+                      : `Queue: ${activePlaylist.length} ayat · ~${formatDuration(totalDuration)}`}
                   </p>
                 </div>
               </div>
@@ -431,12 +486,14 @@ export const SurahAudioPanel = ({
         </div>
       )}
 
-      {!activePlaylist.length && !(isSurahScope && !chapterId) && (
-        <p className="mt-4 rounded-2xl border border-dashed border-white/10 p-4 text-sm text-foreground-muted">
-          This selection does not have audio yet. Try another reciter or adjust the
-          ayah range.
-        </p>
-      )}
+      {!activePlaylist.length &&
+        !fullSurahAudio?.audioUrl &&
+        !(isSurahScope && !chapterId) && (
+          <p className="mt-4 rounded-2xl border border-dashed border-white/10 p-4 text-sm text-foreground-muted">
+            This selection does not have audio yet. Try another reciter or adjust the
+            ayah range.
+          </p>
+        )}
 
     </section>
   );

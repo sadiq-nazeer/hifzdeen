@@ -66,6 +66,20 @@ export type ReciterProfile = {
   translatedName?: string;
 };
 
+/** Verse-level timestamp (ms) within a full-chapter audio file. */
+export type ChapterAudioTimestamp = {
+  verseKey: string;
+  fromMs: number;
+  toMs: number;
+  durationMs: number;
+};
+
+/** Full surah/chapter audio: single URL + verse timestamps. */
+export type ChapterAudioFile = {
+  audioUrl: string;
+  timestamps: ChapterAudioTimestamp[];
+};
+
 export type VersePayload = {
   verse: VerseText;
   translation?: TranslationSnippet;

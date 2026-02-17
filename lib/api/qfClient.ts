@@ -2,6 +2,7 @@ import "server-only";
 
 import { appConfig } from "@/lib/config";
 import type {
+  ChapterAudioFile,
   ChapterSummary,
   CoachSessionVerse,
   ReciterProfile,
@@ -122,6 +123,24 @@ type VerseCollectionResponse = {
 
 type ChapterResponse = {
   chapters: RawChapter[];
+};
+
+type RawChapterAudioTimestamp = {
+  verse_key: string;
+  timestamp_from: number;
+  timestamp_to: number;
+  duration: number;
+};
+
+type RawChapterAudioFileResponse = {
+  audio_file: {
+    id: number;
+    chapter_id: number;
+    file_size: number;
+    format: string;
+    audio_url: string;
+    timestamps?: RawChapterAudioTimestamp[];
+  };
 };
 
 type CoachBundleParams = {
@@ -582,6 +601,56 @@ export const qfApi = {
       revalidateSeconds: 86400,
     });
     return data.chapters.map(mapChapter);
+  },
+
+  /**
+   * Get full chapter (surah) audio file for a reciter.
+   * See: https://api-docs.quran.foundation/docs/content_apis_versioned/chapter-reciter-audio-file
+   */
+  getChapterAudioFile: async ({
+    reciterId = appConfig.defaultAudioReciterId,
+    chapterNumber,
+  }: {
+    reciterId?: number;
+    chapterNumber: number;
+  }): Promise<ChapterAudioFile | undefined> => {
+    const id = reciterId ?? appConfig.defaultAudioReciterId;
+    if (!Number.isFinite(chapterNumber) || chapterNumber < 1 || chapterNumber > 114) {
+      return undefined;
+    }
+    try {
+      const data = await qfFetch<RawChapterAudioFileResponse>(
+        `chapter_recitations/${id}/${chapterNumber}`,
+        {
+          query: { segments: "false" },
+          tags: [`chapter-audio-${chapterNumber}-${id}`],
+          revalidateSeconds: 3600,
+        },
+      );
+      const file = data.audio_file;
+      if (!file?.audio_url) {
+        return undefined;
+      }
+      const audioUrl = normalizeAudioUrl(file.audio_url);
+      const timestamps = (file.timestamps ?? []).map(
+        (t): ChapterAudioFile["timestamps"][number] => ({
+          verseKey: t.verse_key,
+          fromMs: t.timestamp_from,
+          toMs: t.timestamp_to,
+          durationMs: Math.abs(t.duration),
+        }),
+      );
+      return { audioUrl, timestamps };
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        console.warn(
+          `[getChapterAudioFile] No full chapter audio for reciter ${id}, chapter ${chapterNumber}:`,
+          error,
+        );
+        return undefined;
+      }
+      throw error;
+    }
   },
 
   listVersesByChapter: async ({

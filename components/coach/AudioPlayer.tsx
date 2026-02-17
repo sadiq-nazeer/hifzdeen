@@ -18,6 +18,9 @@ type AudioPlayerProps = {
   onEnded?: () => void;
   onStop?: () => void;
   onTimeUpdate?: (currentTime: number) => void;
+  /** When set, preloads this URL and on current track end switches to it and calls onNext for gapless playback */
+  nextAudioUrl?: string;
+  onNext?: () => void;
   disabled?: boolean;
   showStopButton?: boolean;
   enableDragging?: boolean;
@@ -33,6 +36,8 @@ export const AudioPlayer = ({
   onEnded,
   onStop,
   onTimeUpdate,
+  nextAudioUrl,
+  onNext,
   disabled = false,
   showStopButton = true,
   enableDragging = false,
@@ -44,6 +49,7 @@ export const AudioPlayer = ({
   const [trackDurationFromAudio, setTrackDurationFromAudio] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const nextPreloadRef = useRef<HTMLAudioElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const dragJustEndedRef = useRef(false);
 
@@ -55,10 +61,20 @@ export const AudioPlayer = ({
     setLoopSelection(loop);
   }, [loop]);
 
-  // Sync audio element source
+  // Sync audio element source (skip load when src already set e.g. after gapless handoff)
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !audioUrl) return;
+    try {
+      const currentSrc = audio.src;
+      const newSrc = new URL(audioUrl, window.location.origin).href;
+      if (currentSrc === newSrc) {
+        audio.loop = loopSelection;
+        return;
+      }
+    } catch {
+      // ignore URL parse errors
+    }
     audio.src = audioUrl;
     audio.loop = loopSelection;
     audio.load();
@@ -112,6 +128,22 @@ export const AudioPlayer = ({
     };
 
     const handleEnded = () => {
+      if (nextAudioUrl && onNext) {
+        const audio = audioRef.current;
+        if (audio) {
+          audio.src = nextAudioUrl;
+          audio.currentTime = 0;
+          audio.play().then(() => {
+            onNext();
+          }).catch(() => {
+            setIsPlaying(false);
+            onEnded?.();
+          });
+        } else {
+          onNext();
+        }
+        return;
+      }
       setIsPlaying(false);
       onEnded?.();
     };
@@ -129,7 +161,7 @@ export const AudioPlayer = ({
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handleEnded);
     };
-  }, [audioUrl, onPlay, onPause, onEnded, onTimeUpdate]);
+  }, [audioUrl, nextAudioUrl, onPlay, onPause, onEnded, onNext, onTimeUpdate]);
 
   const togglePlayPause = () => {
     if (disabled || !audioUrl) return;
@@ -221,6 +253,15 @@ export const AudioPlayer = ({
           setIsPlaying(false);
         }}
       />
+      {nextAudioUrl ? (
+        <audio
+          ref={nextPreloadRef}
+          src={nextAudioUrl}
+          preload="auto"
+          className="hidden"
+          aria-hidden
+        />
+      ) : null}
       
       {/* Transport bar: time display + play controls */}
       <div className="flex flex-wrap items-center gap-4 border-b border-white/5 px-4 py-3 sm:flex-nowrap">
