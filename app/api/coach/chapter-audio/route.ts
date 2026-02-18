@@ -18,6 +18,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const chapterId = Number(searchParams.get("chapterId"));
   const reciterId = toPositiveNumber(searchParams.get("reciterId"));
+  const includeFullSurah = searchParams.get("fullSurah") === "true";
 
   if (!Number.isFinite(chapterId) || chapterId <= 0) {
     return NextResponse.json(
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const [versesResult, totalDurationSeconds] = await Promise.all([
+    const [versesResult, totalDurationSeconds, fullSurahAudioFile] = await Promise.all([
       qfApi.buildCoachBundle({
         chapterId,
         fromVerse: 1,
@@ -49,6 +50,12 @@ export async function GET(request: Request) {
         reciterId: reciterId ?? undefined,
         chapterNumber: chapterId,
       }),
+      includeFullSurah
+        ? qfApi.getChapterAudioFile({
+            reciterId: reciterId ?? undefined,
+            chapterNumber: chapterId,
+          })
+        : Promise.resolve(undefined),
     ]);
 
     const playlist = versesResult
@@ -74,6 +81,15 @@ export async function GET(request: Request) {
       chapter: { id: number; nameSimple: string; versesCount: number };
       playlist: typeof playlist;
       totalDurationSeconds?: number;
+      fullSurah?: {
+        audioUrl: string;
+        timestamps: Array<{
+          verseKey: string;
+          fromMs: number;
+          toMs: number;
+          durationMs: number;
+        }>;
+      };
     } = {
       chapter: {
         id: chapter.id,
@@ -84,6 +100,9 @@ export async function GET(request: Request) {
     };
     if (totalDurationSeconds !== undefined && totalDurationSeconds > 0) {
       payload.totalDurationSeconds = totalDurationSeconds;
+    }
+    if (fullSurahAudioFile?.audioUrl) {
+      payload.fullSurah = fullSurahAudioFile;
     }
     return NextResponse.json(payload);
   } catch (error) {

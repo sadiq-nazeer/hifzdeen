@@ -211,6 +211,12 @@ export default function CoachPage() {
           chapterName={selectedChapter?.nameSimple}
           reciterId={params.reciterId}
           reciterName={selectedReciter?.name}
+          fromVerse={params.fromVerse}
+          toVerse={params.toVerse}
+          versesCount={selectedChapter?.versesCount}
+          onRangeChange={(fromVerse, toVerse) =>
+            setParams((prev) => ({ ...prev, fromVerse, toVerse }))
+          }
         />
         <button
           type="button"

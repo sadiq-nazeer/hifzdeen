@@ -662,7 +662,8 @@ export const qfApi = {
       const data = await qfFetch<RawChapterAudioFileResponse>(
         `chapter_recitations/${id}/${chapterNumber}`,
         {
-          query: { segments: "false" },
+          // Request timestamps so client can map current playback time to ayah.
+          query: { segments: "true" },
           tags: [`chapter-audio-${chapterNumber}-${id}`],
           revalidateSeconds: 3600,
         },

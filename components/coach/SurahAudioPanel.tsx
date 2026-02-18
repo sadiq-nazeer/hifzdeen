@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown, ChevronUp, Minus, Plus } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   useChapterAudioPlaylist,
@@ -32,12 +33,27 @@ const AYAH_HIGHLIGHT_OPTIONS: Array<{
   { id: "none", label: "None", className: "text-foreground", swatchClass: "bg-foreground/70" },
 ];
 
+/** Full surah paragraph text size: index → Tailwind text/leading classes. */
+const FULL_SURAH_TEXT_SIZES = [
+  "text-base leading-relaxed md:text-lg md:leading-loose lg:text-xl",
+  "text-xl leading-relaxed md:text-2xl md:leading-loose lg:text-3xl",
+  "text-2xl leading-relaxed md:text-3xl md:leading-loose lg:text-4xl",
+  "text-3xl leading-relaxed md:text-4xl md:leading-loose lg:text-5xl",
+] as const;
+const FULL_SURAH_TEXT_SIZE_MIN = 0;
+const FULL_SURAH_TEXT_SIZE_MAX = FULL_SURAH_TEXT_SIZES.length - 1;
+
 type Props = {
   sessionVerses: CoachSessionVerse[];
   chapterId?: number;
   chapterName?: string;
   reciterId?: number;
   reciterName?: string;
+  /** Session slice range (for display and inline editing when scope is "session") */
+  fromVerse?: number;
+  toVerse?: number;
+  versesCount?: number;
+  onRangeChange?: (fromVerse: number, toVerse: number) => void;
 };
 
 const ARABIC_NUMERALS = "٠١٢٣٤٥٦٧٨٩";
@@ -48,18 +64,11 @@ const toArabicNumerals = (n: number): string =>
     .map((d) => ARABIC_NUMERALS[Number.parseInt(d, 10)] ?? d)
     .join("");
 
-const formatDuration = (seconds: number): string => {
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    return "—";
-  }
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.max(0, Math.round(seconds - mins * 60));
-  if (!mins) {
-    return `${secs}s`;
-  }
-  return `${mins}m ${secs.toString().padStart(2, "0")}s`;
+const clampVerse = (value: number | undefined, min: number, max: number): number => {
+  const n = value ?? min;
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, Math.round(n)));
 };
-
 
 export const SurahAudioPanel = ({
   sessionVerses,
@@ -67,11 +76,16 @@ export const SurahAudioPanel = ({
   chapterName,
   reciterId,
   reciterName,
+  fromVerse = 1,
+  toVerse = 5,
+  versesCount = 286,
+  onRangeChange,
 }: Props) => {
   const AYAT_PER_PAGE = 10;
 
   const [scope, setScope] = useState<PlaybackScope>("session");
-  const [fullSurahTextView, setFullSurahTextView] = useState(false);
+  const [fullSurahTextView, setFullSurahTextView] = useState(true);
+  const [fullSurahTextSizeIndex, setFullSurahTextSizeIndex] = useState(1); // 1 = default (medium)
   const [currentAyahHighlight, setCurrentAyahHighlight] =
     useState<CurrentAyahHighlight>("brand");
   const [highlightDropdownOpen, setHighlightDropdownOpen] = useState(false);
@@ -79,12 +93,8 @@ export const SurahAudioPanel = ({
   const [surahPage, setSurahPage] = useState(0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loopSelection] = useState(false);
-  const [cumulativeTime, setCumulativeTime] = useState(0);
-  const [currentVerseTime, setCurrentVerseTime] = useState(0);
-
-  const scrollToRangeSection = () => {
-    document.getElementById("session-range")?.scrollIntoView({ behavior: "smooth" });
-  };
+  const [surahElapsedSeconds, setSurahElapsedSeconds] = useState(0);
+  const [sessionRangeExpanded, setSessionRangeExpanded] = useState(true);
 
   const sessionPlaylist = useMemo<ChapterAudioEntry[]>(
     () =>
@@ -103,6 +113,7 @@ export const SurahAudioPanel = ({
   const isSurahScope = scope === "surah";
   const {
     playlist: surahPlaylist,
+    fullSurahAudio,
     totalDurationSeconds: apiTotalDurationSeconds,
     isLoading: isLoadingSurah,
     isError: surahError,
@@ -110,6 +121,7 @@ export const SurahAudioPanel = ({
   } = useChapterAudioPlaylist({
     chapterId: isSurahScope ? chapterId : undefined,
     reciterId,
+    fullSurah: isSurahScope,
     enabled: isSurahScope,
   });
 
@@ -128,27 +140,62 @@ export const SurahAudioPanel = ({
   );
 
   const currentTrack = activePlaylist[currentIndex];
-  const currentAudioUrl = currentTrack?.audioUrl?.trim() ?? "";
-  const apiTrackDuration = currentTrack?.durationSeconds ?? 0;
-  // In full surah mode use API total duration when available, else sum of playlist durations
+  const sortedSurahTimestamps = useMemo(
+    () =>
+      [...(fullSurahAudio?.timestamps ?? [])].sort(
+        (a, b) => a.fromMs - b.fromMs,
+      ),
+    [fullSurahAudio?.timestamps],
+  );
+  const surahTimelineSeconds =
+    sortedSurahTimestamps.length > 0
+      ? Math.max(0, sortedSurahTimestamps[sortedSurahTimestamps.length - 1].toMs / 1000)
+      : 0;
+  // In full surah mode use the best available total duration.
   const surahTotalSeconds =
     isSurahScope
-      ? Math.max(apiTotalDurationSeconds ?? 0, totalDuration)
+      ? Math.max(apiTotalDurationSeconds ?? 0, surahTimelineSeconds, totalDuration)
       : 0;
+  const currentTrackMs = Math.round(surahElapsedSeconds * 1000);
+  const surahCurrentVerseKey = useMemo(() => {
+    if (!isSurahScope || sortedSurahTimestamps.length === 0) return undefined;
+    const atTime = sortedSurahTimestamps.find(
+      (timestamp) =>
+        currentTrackMs >= timestamp.fromMs && currentTrackMs < timestamp.toMs,
+    );
+    if (atTime) return atTime.verseKey;
+    if (currentTrackMs >= sortedSurahTimestamps[sortedSurahTimestamps.length - 1].toMs) {
+      return sortedSurahTimestamps[sortedSurahTimestamps.length - 1].verseKey;
+    }
+    return undefined;
+  }, [currentTrackMs, isSurahScope, sortedSurahTimestamps]);
+  const surahCurrentIndex = useMemo(() => {
+    if (!surahCurrentVerseKey) return -1;
+    return activePlaylist.findIndex((entry) => entry.verseKey === surahCurrentVerseKey);
+  }, [activePlaylist, surahCurrentVerseKey]);
+  const highlightedTrack =
+    isSurahScope && surahCurrentIndex >= 0
+      ? activePlaylist[surahCurrentIndex]
+      : currentTrack;
+  const currentAudioUrl = isSurahScope
+    ? fullSurahAudio?.audioUrl?.trim() ?? ""
+    : currentTrack?.audioUrl?.trim() ?? "";
+  const apiTrackDuration = currentTrack?.durationSeconds ?? 0;
   const effectiveTrackDuration =
     isSurahScope && surahTotalSeconds > 0 ? surahTotalSeconds : apiTrackDuration;
   const displayCurrentTime =
     isSurahScope && effectiveTrackDuration > 0
-      ? cumulativeTime + currentVerseTime
+      ? surahElapsedSeconds
       : undefined;
 
   useEffect(() => {
     setCurrentIndex(0);
-    setCumulativeTime(0);
-    setCurrentVerseTime(0);
+    setSurahElapsedSeconds(0);
     if (scope === "session") {
       setFullSurahTextView(false);
       setSurahPage(0);
+    } else if (scope === "surah") {
+      setFullSurahTextView(true);
     }
   }, [playlistSignature, scope]);
 
@@ -172,7 +219,7 @@ export const SurahAudioPanel = ({
     }
   }, [surahPage, surahTotalPages]);
 
-  const currentTrackVerseKey = currentTrack?.verseKey;
+  const currentTrackVerseKey = highlightedTrack?.verseKey;
 
   useEffect(() => {
     if (!isSurahScope || !fullSurahTextView || !currentTrackVerseKey || activePlaylist.length === 0) {
@@ -217,15 +264,15 @@ export const SurahAudioPanel = ({
 
   const nextLabel =
     activePlaylist.length > 0
-      ? `Ayah ${currentTrack?.orderInChapter ?? 0} of ${activePlaylist.length}`
+      ? `Ayah ${highlightedTrack?.orderInChapter ?? 0} of ${activePlaylist.length}`
       : "No audio queued";
 
   const scopeButtons: Array<{ id: PlaybackScope; label: string; disabled?: boolean }> =
     [
-      { id: "session", label: "Session slice" },
+      { id: "session", label: "Current Slice" },
       {
         id: "surah",
-        label: "Full surah",
+        label: "Full Surah",
         disabled: !chapterId,
       },
     ];
@@ -241,7 +288,7 @@ export const SurahAudioPanel = ({
             Surah playback
           </p>
           <h2 className="text-2xl font-semibold text-foreground">
-            {isSurahScope ? "Full Surah" : "Current Slice"}
+            {isSurahScope ? "Full Surah" : "Sliced Session"}
           </h2>
           <p className="text-xs text-foreground-muted">
             {chapterName ? `${chapterName} • ` : ""}
@@ -249,31 +296,24 @@ export const SurahAudioPanel = ({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {scopeButtons.map((button) => (
-            <button
-              key={button.id}
-              type="button"
-              disabled={button.disabled}
-              className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                scope === button.id
-                  ? "bg-brand text-black"
-                  : "bg-white/10 text-foreground"
-              } ${button.disabled ? "opacity-40" : "hover:bg-white/20"}`}
-              onClick={() => setScope(button.id)}
-            >
-              {button.label}
-            </button>
-          ))}
-          {scope === "session" && sessionPlaylist.length > 0 && (
-            <button
-              type="button"
-              className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold text-foreground transition hover:border-brand/40 hover:bg-brand/10 hover:text-brand"
-              onClick={scrollToRangeSection}
-            >
-              Change range
-            </button>
-          )}
+        <div className="flex flex-col items-start gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {scopeButtons.map((button) => (
+              <button
+                key={button.id}
+                type="button"
+                disabled={button.disabled}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  scope === button.id
+                    ? "bg-brand text-black"
+                    : "bg-white/10 text-foreground"
+                } ${button.disabled ? "opacity-40" : "hover:bg-white/20"}`}
+                onClick={() => setScope(button.id)}
+              >
+                {button.label}
+              </button>
+            ))}
+          </div>
           {isSurahScope && chapterId && activePlaylist.length > 0 && (
             <button
               type="button"
@@ -284,11 +324,79 @@ export const SurahAudioPanel = ({
               }`}
               onClick={() => setFullSurahTextView((prev) => !prev)}
             >
-              {fullSurahTextView ? "Ayah only view" : "Full surah view"}
+              {fullSurahTextView ? "Ayah Only View" : "Full Surah View"}
             </button>
           )}
         </div>
       </header>
+
+      {scope === "session" && onRangeChange && chapterId != null && versesCount > 0 && (
+        <div className="mt-4 rounded-2xl border border-white/10 bg-surface-muted/30 overflow-hidden">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-3 p-3 text-left transition hover:bg-white/5 md:p-4"
+            onClick={() => setSessionRangeExpanded((prev) => !prev)}
+            aria-expanded={sessionRangeExpanded}
+          >
+            <span className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">
+              Session range
+            </span>
+            <span className="shrink-0 text-foreground-muted" aria-hidden>
+              {sessionRangeExpanded ? (
+                <ChevronUp className="h-5 w-5" strokeWidth={2} />
+              ) : (
+                <ChevronDown className="h-5 w-5" strokeWidth={2} />
+              )}
+            </span>
+          </button>
+          {sessionRangeExpanded && (
+            <div className="border-t border-white/10 p-3 md:p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <p className="text-sm text-foreground-muted">
+                  Current: Ayah {clampVerse(fromVerse, 1, versesCount)} – {clampVerse(toVerse, 1, versesCount)}
+                  {versesCount > 0 && (
+                    <span className="ml-1 tabular-nums">
+                      ({sessionPlaylist.length} ayat with audio)
+                    </span>
+                  )}
+                </p>
+                <div className="flex flex-wrap items-end gap-3 md:shrink-0">
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-xs font-medium text-foreground-muted">From</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={versesCount}
+                      className="w-20 rounded-xl border border-white/10 bg-surface-raised/80 px-3 py-2 text-sm text-foreground outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                      value={clampVerse(fromVerse, 1, versesCount)}
+                      onChange={(e) => {
+                        const from = clampVerse(Number(e.target.value), 1, versesCount);
+                        onRangeChange(from, Math.max(from, clampVerse(toVerse, 1, versesCount)));
+                      }}
+                      aria-label="From verse"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-xs font-medium text-foreground-muted">To</span>
+                    <input
+                      type="number"
+                      min={clampVerse(fromVerse, 1, versesCount)}
+                      max={versesCount}
+                      className="w-20 rounded-xl border border-white/10 bg-surface-raised/80 px-3 py-2 text-sm text-foreground outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                      value={clampVerse(toVerse, 1, versesCount)}
+                      onChange={(e) => {
+                        const to = clampVerse(Number(e.target.value), clampVerse(fromVerse, 1, versesCount), versesCount);
+                        onRangeChange(clampVerse(fromVerse, 1, versesCount), to);
+                      }}
+                      aria-label="To verse"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {isSurahScope && !chapterId && (
         <p className="mt-4 rounded-2xl border border-dashed border-white/10 p-3 text-sm md:p-4 text-foreground-muted">
@@ -318,26 +426,22 @@ export const SurahAudioPanel = ({
                 durationSeconds={effectiveTrackDuration}
                 loop={loopSelection}
                 nextAudioUrl={
-                  activePlaylist.length > 0 && currentIndex + 1 < activePlaylist.length
-                    ? activePlaylist[currentIndex + 1].audioUrl
-                    : loopSelection
-                      ? activePlaylist[0]?.audioUrl
-                      : undefined
+                  isSurahScope
+                    ? undefined
+                    : activePlaylist.length > 0 && currentIndex + 1 < activePlaylist.length
+                      ? activePlaylist[currentIndex + 1].audioUrl
+                      : loopSelection
+                        ? activePlaylist[0]?.audioUrl
+                        : undefined
                 }
-                onNext={() => {
+                onNext={(completedTrackSeconds) => {
+                  if (isSurahScope) return;
                   if (!activePlaylist.length) return;
-                  if (isSurahScope && currentTrack) {
-                    setCumulativeTime((prev) => prev + (currentTrack.durationSeconds ?? 0));
-                    setCurrentVerseTime(0);
-                  }
+                  void completedTrackSeconds;
                   setCurrentIndex((prev) => {
                     const nextIndex = prev + 1;
                     if (nextIndex < activePlaylist.length) return nextIndex;
                     if (loopSelection) {
-                      if (isSurahScope) {
-                        setCumulativeTime(0);
-                        setCurrentVerseTime(0);
-                      }
                       return 0;
                     }
                     return prev;
@@ -345,17 +449,16 @@ export const SurahAudioPanel = ({
                 }}
                 onPlay={() => {}}
                 onPause={() => {}}
-                onTimeUpdate={isSurahScope ? setCurrentVerseTime : undefined}
+                onTimeUpdate={isSurahScope ? setSurahElapsedSeconds : undefined}
                 onStop={() => {
                   setCurrentIndex(0);
-                  setCumulativeTime(0);
-                  setCurrentVerseTime(0);
+                  setSurahElapsedSeconds(0);
                 }}
                 onEnded={() => {
                   if (!activePlaylist.length) return;
-                  if (isSurahScope && currentTrack) {
-                    setCumulativeTime((prev) => prev + (currentTrack.durationSeconds ?? 0));
-                    setCurrentVerseTime(0);
+                  if (isSurahScope) {
+                    setSurahElapsedSeconds(effectiveTrackDuration);
+                    return;
                   }
                   const hasNext =
                     currentIndex + 1 < activePlaylist.length || loopSelection;
@@ -366,7 +469,7 @@ export const SurahAudioPanel = ({
                 displayCurrentTime={displayCurrentTime}
                 disabled={disablePanel}
                 showStopButton={true}
-                enableDragging={true}
+                enableDragging={isSurahScope}
               />
               <div className="mt-3 px-4">
                 {/* <div className="min-w-0 flex-1">
@@ -386,9 +489,40 @@ export const SurahAudioPanel = ({
               <div className="full-surah-ayat-list -mx-3 w-[calc(100%+1.5rem)] max-w-none space-y-1 md:-mx-4 md:w-[calc(100%+2rem)]">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs font-semibold text-foreground-muted">
-                    Full surah • {activePlaylist.length} ayat
+                    Full Surah • {activePlaylist.length} ayats
                   </p>
                   <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs text-foreground-muted">
+                      Text size:
+                    </span>
+                    <div className="flex items-center rounded-lg border border-white/10 bg-white/5">
+                      <button
+                        type="button"
+                        disabled={fullSurahTextSizeIndex <= FULL_SURAH_TEXT_SIZE_MIN}
+                        className="rounded-l-lg p-1.5 text-foreground transition hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent"
+                        onClick={() =>
+                          setFullSurahTextSizeIndex((i) =>
+                            Math.max(FULL_SURAH_TEXT_SIZE_MIN, i - 1)
+                          )
+                        }
+                        aria-label="Decrease text size"
+                      >
+                        <Minus className="h-4 w-4" strokeWidth={2} />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={fullSurahTextSizeIndex >= FULL_SURAH_TEXT_SIZE_MAX}
+                        className="rounded-r-lg border-l border-white/10 p-1.5 text-foreground transition hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-transparent"
+                        onClick={() =>
+                          setFullSurahTextSizeIndex((i) =>
+                            Math.min(FULL_SURAH_TEXT_SIZE_MAX, i + 1)
+                          )
+                        }
+                        aria-label="Increase text size"
+                      >
+                        <Plus className="h-4 w-4" strokeWidth={2} />
+                      </button>
+                    </div>
                     <span className="text-xs text-foreground-muted">
                       Highlight:
                     </span>
@@ -444,11 +578,11 @@ export const SurahAudioPanel = ({
                 </div>
                 <div className="rounded-xl border border-white/10 bg-surface-muted/30 p-3 md:p-4">
                   <div
-                    className="surah-paragraph text-center text-xl leading-relaxed text-foreground md:text-2xl md:leading-loose lg:text-3xl"
+                    className={`surah-paragraph text-center text-foreground ${FULL_SURAH_TEXT_SIZES[fullSurahTextSizeIndex]}`}
                     dir="rtl"
                   >
                     {surahPageAyat.map((entry) => {
-                      const isCurrentAyah = currentTrack?.verseKey === entry.verseKey;
+                      const isCurrentAyah = highlightedTrack?.verseKey === entry.verseKey;
                       const highlightClass =
                         isCurrentAyah
                           ? AYAH_HIGHLIGHT_OPTIONS.find(
@@ -474,7 +608,7 @@ export const SurahAudioPanel = ({
                     })}
                   </div>
                 </div>
-                {currentTrack && (
+                {highlightedTrack && (
                   <p className="text-xs text-foreground-muted">
                     Now playing: {nextLabel}
                   </p>
@@ -505,15 +639,15 @@ export const SurahAudioPanel = ({
               </div>
             ) : (
               <div>
-                {currentTrack && (
+                {highlightedTrack && (
                   <p className="mb-1 text-xs font-semibold text-foreground-muted">
                     Now playing • {nextLabel}
                   </p>
                 )}
                 <div className="now-playing-card -mx-4 w-[calc(100%+2rem)] max-w-none rounded-xl border-l-4 border-brand bg-surface-highlight/50 p-3 text-foreground md:p-4">
-                  {currentTrack ? (
+                  {highlightedTrack ? (
                     <p className="text-right text-3xl leading-snug text-foreground" dir="rtl">
-                      {currentTrack.text}
+                      {highlightedTrack.text}
                     </p>
                   ) : (
                     <p className="text-xs">No ayah selected yet.</p>

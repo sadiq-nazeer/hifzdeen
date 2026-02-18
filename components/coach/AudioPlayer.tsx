@@ -18,9 +18,9 @@ type AudioPlayerProps = {
   onEnded?: () => void;
   onStop?: () => void;
   onTimeUpdate?: (currentTime: number) => void;
-  /** When set, preloads this URL and on current track end switches to it and calls onNext for gapless playback */
+  /** When set, preloads this URL and on current track end reports completion then advances via onNext */
   nextAudioUrl?: string;
-  onNext?: () => void;
+  onNext?: (completedTrackSeconds: number) => void;
   /** Override displayed currentTime (e.g. cumulative time across multiple tracks) */
   displayCurrentTime?: number;
   disabled?: boolean;
@@ -55,6 +55,12 @@ export const AudioPlayer = ({
   const nextPreloadRef = useRef<HTMLAudioElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
   const dragJustEndedRef = useRef(false);
+  const advancingTrackRef = useRef(false);
+  const onPlayRef = useRef(onPlay);
+  const onPauseRef = useRef(onPause);
+  const onEndedRef = useRef(onEnded);
+  const onTimeUpdateRef = useRef(onTimeUpdate);
+  const onNextRef = useRef(onNext);
 
   const effectiveDuration =
     durationSeconds > 0 ? durationSeconds : trackDurationFromAudio;
@@ -64,7 +70,7 @@ export const AudioPlayer = ({
     setLoopSelection(loop);
   }, [loop]);
 
-  // Sync audio element source (skip load when src already set e.g. after gapless handoff)
+  // Sync audio element source
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !audioUrl) return;
@@ -73,6 +79,9 @@ export const AudioPlayer = ({
       const newSrc = new URL(audioUrl, window.location.origin).href;
       if (currentSrc === newSrc) {
         audio.loop = loopSelection;
+        if (advancingTrackRef.current) {
+          advancingTrackRef.current = false;
+        }
         return;
       }
     } catch {
@@ -81,7 +90,20 @@ export const AudioPlayer = ({
     audio.src = audioUrl;
     audio.loop = loopSelection;
     audio.load();
+    if (advancingTrackRef.current) {
+      // Keep playback continuous when parent advanced to the next verse.
+      setIsPlaying(true);
+      advancingTrackRef.current = false;
+    }
   }, [audioUrl, loopSelection]);
+
+  useEffect(() => {
+    onPlayRef.current = onPlay;
+    onPauseRef.current = onPause;
+    onEndedRef.current = onEnded;
+    onTimeUpdateRef.current = onTimeUpdate;
+    onNextRef.current = onNext;
+  }, [onPlay, onPause, onEnded, onTimeUpdate, onNext]);
 
   // Handle play/pause state
   useEffect(() => {
@@ -91,12 +113,12 @@ export const AudioPlayer = ({
     if (isPlaying) {
       audio.play().catch(() => {
         setIsPlaying(false);
-        onPause?.();
+        onPauseRef.current?.();
       });
     } else {
       audio.pause();
     }
-  }, [isPlaying, audioUrl, onPause]);
+  }, [isPlaying, audioUrl]);
 
   // Sync time updates
   useEffect(() => {
@@ -106,7 +128,7 @@ export const AudioPlayer = ({
     const syncTime = () => {
       const time = audio.currentTime;
       setCurrentTime(time);
-      onTimeUpdate?.(time);
+      onTimeUpdateRef.current?.(time);
     };
 
     const onLoadedMetadata = () => {
@@ -124,33 +146,46 @@ export const AudioPlayer = ({
 
     const handlePlay = () => {
       setIsPlaying(true);
-      onPlay?.();
+      onPlayRef.current?.();
     };
 
     const handlePause = () => {
+      if (advancingTrackRef.current) {
+        return;
+      }
       setIsPlaying(false);
-      onPause?.();
+      onPauseRef.current?.();
     };
 
     const handleEnded = () => {
-      if (nextAudioUrl && onNext) {
+      const nextHandler = onNextRef.current;
+      if (nextAudioUrl && nextHandler) {
         const audio = audioRef.current;
         if (audio) {
+          const completedTrackSeconds =
+            Number.isFinite(audio.currentTime) && audio.currentTime > 0
+              ? audio.currentTime
+              : Number.isFinite(audio.duration) && audio.duration > 0
+                ? audio.duration
+                : 0;
+          advancingTrackRef.current = true;
           audio.src = nextAudioUrl;
           audio.currentTime = 0;
           audio.play().then(() => {
-            onNext();
+            nextHandler(completedTrackSeconds);
           }).catch(() => {
+            advancingTrackRef.current = false;
             setIsPlaying(false);
-            onEnded?.();
+            onEndedRef.current?.();
           });
         } else {
-          onNext();
+          advancingTrackRef.current = false;
+          nextHandler(0);
         }
         return;
       }
       setIsPlaying(false);
-      onEnded?.();
+      onEndedRef.current?.();
     };
 
     audio.addEventListener("timeupdate", syncTime);
@@ -166,7 +201,7 @@ export const AudioPlayer = ({
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handleEnded);
     };
-  }, [audioUrl, durationSeconds, nextAudioUrl, onPlay, onPause, onEnded, onNext, onTimeUpdate]);
+  }, [audioUrl, durationSeconds, nextAudioUrl]);
 
   const togglePlayPause = () => {
     if (disabled || !audioUrl) return;
@@ -174,6 +209,7 @@ export const AudioPlayer = ({
   };
 
   const stopPlayback = () => {
+    advancingTrackRef.current = false;
     setIsPlaying(false);
     const audio = audioRef.current;
     if (audio) {
@@ -181,6 +217,7 @@ export const AudioPlayer = ({
       audio.currentTime = 0;
     }
     setCurrentTime(0);
+    onTimeUpdateRef.current?.(0);
     onStop?.();
   };
 
@@ -200,6 +237,7 @@ export const AudioPlayer = ({
       const seekTo = pct * effectiveDuration;
       audio.currentTime = seekTo;
       setCurrentTime(seekTo);
+      onTimeUpdateRef.current?.(seekTo);
     },
     [audioUrl, effectiveDuration]
   );
@@ -289,7 +327,17 @@ export const AudioPlayer = ({
             aria-label={isPlaying ? "Pause" : "Play"}
           >
             {isPlaying ? (
-              <span className="text-sm font-bold">‖</span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden
+              >
+                <rect x="6" y="4" width="4" height="16" rx="1" />
+                <rect x="14" y="4" width="4" height="16" rx="1" />
+              </svg>
             ) : (
               <span className="ml-0.5 text-sm font-bold">▶</span>
             )}
@@ -360,7 +408,6 @@ export const AudioPlayer = ({
               aria-valuemin={0}
               aria-valuemax={effectiveDuration}
               onClick={handleProgressClick}
-              onMouseDown={startDrag}
             >
               <div className="relative h-1.5 w-full rounded-full bg-white/10 transition hover:bg-white/15">
                 <div
