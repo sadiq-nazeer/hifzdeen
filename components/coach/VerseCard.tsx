@@ -14,11 +14,7 @@ type Props = {
   verse: CoachSessionVerse;
   progress: VerseProgress;
   onProgressChange: (update: Partial<VerseProgress>) => void;
-  /** Optional surah/chapter name (e.g. from parent) for display in the header. */
-  chapterName?: string;
 };
-
-const formatVerseLabel = (verseKey: string) => verseKey.replace(":", " · ");
 
 /** Split Uthmani Arabic verse into words (space-separated). */
 function splitVerseIntoWords(text: string): string[] {
@@ -71,12 +67,7 @@ function isStageSelected(
   return score >= stage.min && score <= stage.max;
 }
 
-export const VerseCard = ({
-  verse,
-  progress,
-  onProgressChange,
-  chapterName,
-}: Props) => {
+export const VerseCard = ({ verse, progress, onProgressChange }: Props) => {
   const [showArabic, setShowArabic] = useState(true);
   const [showTranslation, setShowTranslation] = useState(false);
   const [showConfidence, setShowConfidence] = useState(false);
@@ -225,7 +216,7 @@ export const VerseCard = ({
         </button>
       </div>
       <section
-        className="overflow-hidden rounded-2xl border border-amber-500/15 bg-gradient-to-br from-amber-950/20 via-surface-muted/30 to-surface-muted/20 shadow-[inset_0_1px_0_0_rgba(251,191,36,0.06)]"
+        className="islamic-card overflow-hidden rounded-2xl border border-foreground/10 bg-surface-muted/70 shadow-sm"
         aria-labelledby="arabic-verse-heading"
       >
         <button
@@ -235,7 +226,7 @@ export const VerseCard = ({
           onClick={() => setShowArabic((prev) => !prev)}
           aria-expanded={showArabic}
         >
-          <span className="text-sm font-medium uppercase tracking-[0.35em] text-amber-200/90">
+          <span className="text-xs font-medium uppercase tracking-[0.4em] text-foreground-muted">
             Arabic verse
           </span>
           <span className="text-brand text-sm font-medium" aria-hidden>

@@ -320,7 +320,6 @@ export default function HifzPage() {
                       verse={verse}
                       progress={progress[verseKey] ?? { listened: false, whispered: false }}
                       onProgressChange={(update) => handleProgressChange(verseKey, update)}
-                      chapterName={selectedChapter?.nameSimple}
                     />
                   )}
                 </section>
