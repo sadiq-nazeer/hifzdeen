@@ -25,8 +25,12 @@ export interface ZakatInputs {
   receivables: number;
   /** Other zakatable assets */
   other: number;
-  /** Debts due immediately */
+  /** Borrowed money, goods bought on credit */
   debts: number;
+  /** Taxes, rent, utility bills due immediately */
+  taxesRentBills: number;
+  /** Wages due to employees */
+  wagesDue: number;
 }
 
 export interface ZakatResult {
@@ -77,8 +81,11 @@ export function calculateZakat(
   nisab: number,
 ): ZakatResult {
   const total = totalAssets(inputs);
-  const debts = Number(inputs.debts) || 0;
-  const netWealth = Math.max(0, total - debts);
+  const totalDebts =
+    (Number(inputs.debts) || 0) +
+    (Number(inputs.taxesRentBills) || 0) +
+    (Number(inputs.wagesDue) || 0);
+  const netWealth = Math.max(0, total - totalDebts);
   const isLiable = nisab > 0 && netWealth >= nisab;
   const zakatDue = isLiable ? netWealth * 0.025 : 0;
 
