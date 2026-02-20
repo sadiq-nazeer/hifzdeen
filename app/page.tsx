@@ -1,4 +1,4 @@
-import { BookOpen, Headphones, GraduationCap, Sparkles } from "lucide-react";
+import { BookOpen, Calculator, Headphones, GraduationCap, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { FeatureCard } from "@/components/ui/FeatureCard";
 import { Hero } from "@/components/ui/Hero";
@@ -28,6 +28,14 @@ const features = [
     href: "/listening",
     icon: <Headphones className="h-6 w-6" />,
     cta: "Start Listening",
+  },
+  {
+    title: "Zakat Calculator",
+    description:
+      "Calculate your zakat based on nisab (gold or silver) and your zakatable wealth. A simple guide to fulfill this pillar of Islam.",
+    href: "/zakat",
+    icon: <Calculator className="h-6 w-6" />,
+    cta: "Calculate Zakat",
   },
 ];
 

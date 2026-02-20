@@ -42,6 +42,12 @@ export async function Header() {
             >
               Memorize Quran
             </Link>
+            <Link
+              href="/zakat"
+              className="text-sm text-foreground/80 underline-offset-4 transition hover:text-brand hover:underline"
+            >
+              Zakat
+            </Link>
           </nav>
         </div>
         <div className="flex shrink-0 items-center gap-3">
