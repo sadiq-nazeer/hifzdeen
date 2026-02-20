@@ -7,6 +7,7 @@ import {
   useChapterAudioPlaylist,
   type ChapterAudioEntry,
 } from "@/lib/hooks/useChapterAudioPlaylist";
+import { buildPronounceableVerseWords } from "@/lib/quranWords";
 import type { CoachSessionVerse } from "@/lib/types/quran";
 import { AudioPlayer } from "./AudioPlayer";
 
@@ -486,12 +487,9 @@ export const SurahAudioPanel = ({
                       const nowVerse = highlightedTrack.verseKey
                         ? verseByKeyForWords.get(highlightedTrack.verseKey)
                         : undefined;
-                      const nowWords =
-                        nowVerse?.verse.words?.filter(
-                          (w) =>
-                            w.charTypeName !== "end" &&
-                            w.textUthmani.trim().length > 0,
-                        ) ?? [];
+                      const nowWords = buildPronounceableVerseWords(
+                        nowVerse?.verse.words,
+                      );
                       const nowVerseWords =
                         nowWords.length > 0
                           ? nowWords.map((w) => w.textUthmani)

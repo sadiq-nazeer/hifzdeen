@@ -7,6 +7,7 @@ import {
   SURAH_TEXT_COLOR_OPTIONS,
   type SurahTextColorId,
 } from "@/components/quran/surahTextColors";
+import { buildPronounceableVerseWords } from "@/lib/quranWords";
 import type { CoachSessionVerse } from "@/lib/types/quran";
 
 /** Split Uthmani Arabic verse into words (space-separated). */
@@ -117,11 +118,7 @@ export function FullSurahText({
     const entries: VerseWordEntry[] = [];
     for (const cv of sortedVerses) {
       const v = cv.verse;
-      const apiWords =
-        v.words?.filter(
-          (w) =>
-            w.charTypeName !== "end" && w.textUthmani.trim().length > 0,
-        ) ?? [];
+      const apiWords = buildPronounceableVerseWords(v.words);
       const wordTexts =
         apiWords.length > 0
           ? apiWords.map((w) => w.textUthmani)
@@ -420,12 +417,7 @@ export function FullSurahText({
             // Verse-based pages: render verses assembled from each verse's words/text only
             pageVerses.map((verse) => {
               const isHighlighted = verse.verse.verseKey === highlightedVerseKey;
-              const apiWords =
-                verse.verse.words?.filter(
-                  (word) =>
-                    word.charTypeName !== "end" &&
-                    word.textUthmani.trim().length > 0,
-                ) ?? [];
+              const apiWords = buildPronounceableVerseWords(verse.verse.words);
               const verseWords =
                 apiWords.length > 0
                   ? apiWords.map((w) => w.textUthmani)

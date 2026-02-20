@@ -1,6 +1,7 @@
 import { Check, Ear, Mic } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { CoachSessionVerse } from "@/lib/types/quran";
+import { buildPronounceableVerseWords } from "@/lib/quranWords";
+import type { CoachSessionVerse, VerseWord } from "@/lib/types/quran";
 import { AudioPlayer } from "./AudioPlayer";
 
 type VerseProgress = {
@@ -25,24 +26,72 @@ function splitVerseIntoWords(text: string): string[] {
 /** Lead (seconds): highlight advances slightly ahead for perceived sync with recitation audio. */
 const SEGMENT_LEAD_SEC = 0.2;
 
-/** Get the word index that should be highlighted for the given playback time. */
+/**
+ * Get the word index that should be highlighted for the given playback time.
+ *
+ * The API may return segment timing for ALL word tokens (including pause marks,
+ * sajdah glyphs, etc.) OR only for spoken words. We detect which at runtime:
+ *
+ * - If segments.length ≤ pronounceable-word count → segments cover only spoken
+ *   words (Case B). We map rawIndex to the Nth pronounceable word in the array.
+ * - Otherwise → segments cover every token (Case A). We use the index directly,
+ *   and if it lands on a non-pronounceable token we walk back to the nearest
+ *   preceding pronounceable word.
+ *
+ * This dual-case approach avoids the off-by-one drift that occurs when pause
+ * marks or other non-pronounceable tokens sit between spoken words.
+ */
 function getActiveWordIndex(
   currentTime: number,
   duration: number,
   segments: Array<[number, number]> | undefined,
-  wordCount: number,
+  words: VerseWord[],
 ): number {
-  if (wordCount <= 0) return -1;
-  if (duration <= 0) return -1;
+  if (!words.length || duration <= 0 || !segments || segments.length === 0) return -1;
 
-  if (segments && segments.length > 0) {
-    const t = currentTime + SEGMENT_LEAD_SEC;
-    for (let i = 0; i < segments.length; i++) {
-      const [start, end] = segments[i];
-      if (t >= start && t < end) return Math.min(i, wordCount - 1);
-      if (t < start) return Math.max(0, i - 1);
+  const t = currentTime + SEGMENT_LEAD_SEC;
+  let rawIndex = -1;
+
+  for (let i = 0; i < segments.length; i++) {
+    const [start, end] = segments[i];
+    if (t >= start && t < end) {
+      rawIndex = i;
+      break;
     }
-    return Math.min(segments.length - 1, wordCount - 1);
+    if (t < start) {
+      rawIndex = Math.max(0, i - 1);
+      break;
+    }
+  }
+  if (rawIndex < 0) rawIndex = segments.length - 1;
+
+  const pronounceableCount = words.filter((w) => Boolean(w.audioUrl?.trim())).length;
+
+  if (segments.length <= pronounceableCount) {
+    // Case B: segments cover only pronounceable (spoken) words.
+    // Map rawIndex → the rawIndex-th pronounceable word in the display array.
+    const clampedRaw = Math.min(rawIndex, pronounceableCount - 1);
+    let count = 0;
+    for (let i = 0; i < words.length; i++) {
+      if (words[i].audioUrl?.trim()) {
+        if (count === clampedRaw) return i;
+        count++;
+      }
+    }
+    return -1;
+  }
+
+  // Case A: segments cover all tokens (including non-pronounceable).
+  const clampedIndex = Math.min(rawIndex, words.length - 1);
+  if (words[clampedIndex]?.audioUrl?.trim()) return clampedIndex;
+
+  // Landed on a non-pronounceable token — walk back to preceding spoken word.
+  for (let i = clampedIndex - 1; i >= 0; i--) {
+    if (words[i].audioUrl?.trim()) return i;
+  }
+  // Nothing before it — walk forward.
+  for (let i = clampedIndex + 1; i < words.length; i++) {
+    if (words[i].audioUrl?.trim()) return i;
   }
   return -1;
 }
@@ -81,11 +130,7 @@ export const VerseCard = ({ verse, progress, onProgressChange }: Props) => {
   const segments = verse.audio?.audio.segments;
   const apiDuration = verse.audio?.audio.durationSeconds ?? 0;
 
-  const apiWords =
-    verse.verse.words?.filter(
-      (word) =>
-        word.charTypeName !== "end" && word.textUthmani.trim().length > 0,
-    ) ?? [];
+  const apiWords = buildPronounceableVerseWords(verse.verse.words);
   const verseWords =
     apiWords.length > 0
       ? apiWords.map((word) => word.textUthmani)
@@ -97,7 +142,7 @@ export const VerseCard = ({ verse, progress, onProgressChange }: Props) => {
     currentTime,
     effectiveDuration,
     segments,
-    verseWords.length,
+    apiWords,
   );
 
   useEffect(() => {
