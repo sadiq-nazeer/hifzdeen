@@ -1,6 +1,6 @@
 "use client";
 
-import { Minus, Palette, Plus, Type } from "lucide-react";
+import { Minus, Palette, Plus, Type, Maximize2, X } from "lucide-react";
 import { Fragment, startTransition, useEffect, useMemo, useRef, useState } from "react";
 import {
   getSurahTextColorOption,
@@ -77,6 +77,7 @@ export function FullSurahText({
   const [highlightColor, setHighlightColor] = useState<SurahTextColorId>(defaultHighlightColor);
   const [currentPage, setCurrentPage] = useState(0);
   const [colorDropdownOpen, setColorDropdownOpen] = useState(false);
+  const [fullScreenOpen, setFullScreenOpen] = useState(false);
   const [playingWordKey, setPlayingWordKey] = useState<string | null>(null);
   const colorDropdownRef = useRef<HTMLDivElement>(null);
   const prevInitialPageRef = useRef<number>(-1);
@@ -185,6 +186,28 @@ export function FullSurahText({
 
   const safePage = Math.min(currentPage, Math.max(0, totalPages - 1));
 
+  // For full-screen: verse index -> page index (so we can show gaps between pages)
+  const verseToPageIndex = useMemo((): number[] => {
+    if (useWordsPerPage) {
+      return verseStartIndices.map((wordStart) => {
+        const p = wordPageStarts.findIndex(
+          (start, i) =>
+            start <= wordStart &&
+            (i + 1 >= wordPageStarts.length ||
+              wordStart < wordPageStarts[i + 1]!),
+        );
+        return p >= 0 ? p : 0;
+      });
+    }
+    return sortedVerses.map((_, v) => Math.floor(v / versesPerPage));
+  }, [
+    useWordsPerPage,
+    verseStartIndices,
+    wordPageStarts,
+    sortedVerses,
+    versesPerPage,
+  ]);
+
   const pageVerses = useMemo(
     () =>
       sortedVerses.slice(
@@ -273,6 +296,21 @@ export function FullSurahText({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [colorDropdownOpen]);
 
+  // Close full screen on Escape and lock body scroll when open
+  useEffect(() => {
+    if (!fullScreenOpen) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullScreenOpen(false);
+    };
+    document.addEventListener("keydown", handleEscape);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [fullScreenOpen]);
+
   if (sortedVerses.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-white/10 bg-surface-muted/30 p-8 text-center">
@@ -289,7 +327,7 @@ export function FullSurahText({
       {/* Surah info and controls on one row: info left, text size + color picker right */}
       <div className="flex flex-nowrap items-center justify-between gap-2">
         <p className="text-xs font-semibold text-foreground-muted shrink-0">
-          Full Surah • {sortedVerses.length} ayats
+          {sortedVerses.length} ayats
           {useWordsPerPage
             ? ` • ${allWordEntries.length} words`
             : ""}
@@ -391,6 +429,15 @@ export function FullSurahText({
               </div>
             )}
           </div>
+          <button
+            type="button"
+            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 p-1.5 text-foreground transition hover:bg-white/10"
+            onClick={() => setFullScreenOpen(true)}
+            aria-label="Preview full surah in full screen"
+            title="Full screen preview"
+          >
+            <Maximize2 className="h-4 w-4 shrink-0 text-foreground-muted" aria-hidden />
+          </button>
         </div>
       </div>
 
@@ -542,6 +589,102 @@ export function FullSurahText({
           Next
         </button>
       </div>
+
+      {/* Full-screen scrollable preview */}
+      {fullScreenOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-background"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Full surah full screen preview"
+        >
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-surface-muted/30 px-4 py-3">
+            <p className="text-sm font-semibold text-foreground-muted">
+              Full Surah • {sortedVerses.length} ayats
+              {useWordsPerPage ? ` • ${allWordEntries.length} words` : ""}
+            </p>
+            <button
+              type="button"
+              className="rounded-lg border border-white/10 bg-white/5 p-2 text-foreground transition hover:bg-white/10"
+              onClick={() => setFullScreenOpen(false)}
+              aria-label="Close full screen"
+            >
+              <X className="h-5 w-5" aria-hidden />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div
+              className={`mx-auto max-w-4xl px-4 py-6 pb-12 text-center ${FULL_SURAH_TEXT_SIZES[textSizeIndex]}`}
+              dir="rtl"
+            >
+              {sortedVerses.map((verse, verseIndex) => {
+                const isHighlighted = verse.verse.verseKey === highlightedVerseKey;
+                const apiWords = buildPronounceableVerseWords(verse.verse.words);
+                const verseWords =
+                  apiWords.length > 0
+                    ? apiWords.map((w) => w.textUthmani)
+                    : splitVerseIntoWords(verse.verse.textUthmani);
+                const baseClassName = isHighlighted
+                  ? selectedHighlightOption.textClass
+                  : selectedTextOption.textClass;
+                const nextVersePage =
+                  verseIndex + 1 < verseToPageIndex.length
+                    ? verseToPageIndex[verseIndex + 1]
+                    : -1;
+                const thisVersePage = verseToPageIndex[verseIndex] ?? 0;
+                const showPageGapAfter =
+                  nextVersePage >= 0 && nextVersePage !== thisVersePage;
+
+                return (
+                  <Fragment key={verse.verse.verseKey}>
+                    <span className={baseClassName}>
+                      {verseWords.length > 0
+                        ? verseWords.map((word, i) => (
+                            <span key={i}>
+                              {apiWords[i]?.audioUrl ? (
+                                <button
+                                  type="button"
+                                  className={`m-0 inline border-0 bg-transparent p-0 font-inherit leading-inherit transition-colors hover:opacity-80 ${playingWordKey === `${verse.verse.verseKey}-${apiWords[i].id}` ? "opacity-100 text-brand" : ""}`}
+                                  onClick={() =>
+                                    playWordAudio(
+                                      apiWords[i].audioUrl,
+                                      `${verse.verse.verseKey}-${apiWords[i].id}`,
+                                    )
+                                  }
+                                  title="Play word audio"
+                                  aria-label={`Play word audio: ${word}`}
+                                >
+                                  {word}
+                                </button>
+                              ) : (
+                                <span>{word}</span>
+                              )}
+                              {i < verseWords.length - 1 ? "\u00A0" : null}
+                            </span>
+                          ))
+                        : verse.verse.textUthmani}
+                    </span>
+                    <span
+                      className="verse-number-marker verse-number-marker--circle"
+                      aria-label={`Ayah ${verse.orderInChapter}`}
+                    >
+                      {toArabicNumerals(verse.orderInChapter)}
+                    </span>
+                    {" "}
+                    {showPageGapAfter ? (
+                      <div
+                        className="my-8 border-t border-white/10"
+                        aria-hidden
+                        style={{ minHeight: "2rem" }}
+                      />
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
