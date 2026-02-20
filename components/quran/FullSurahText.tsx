@@ -136,12 +136,52 @@ export function FullSurahText({
     return entries;
   }, [sortedVerses]);
 
+  // Word-based pagination: verse boundaries (start index of each verse in allWordEntries)
+  const verseStartIndices = useMemo((): number[] => {
+    const starts: number[] = [0];
+    for (let i = 1; i < allWordEntries.length; i++) {
+      if (allWordEntries[i].verseKey !== allWordEntries[i - 1].verseKey) {
+        starts.push(i);
+      }
+    }
+    return starts;
+  }, [allWordEntries]);
+
+  // Word-based pagination: page start indices so we never break a verse (complete verse, then next page)
+  const wordPageStarts = useMemo((): number[] => {
+    if (!useWordsPerPage || wordsPerPage <= 0 || allWordEntries.length === 0) {
+      return [0];
+    }
+    const pageStarts: number[] = [0];
+    let currentPageStart = 0;
+    for (let v = 0; v < verseStartIndices.length; v++) {
+      const verseStart = verseStartIndices[v];
+      const verseEnd =
+        v + 1 < verseStartIndices.length
+          ? verseStartIndices[v + 1] - 1
+          : allWordEntries.length - 1;
+      const verseWordCount = verseEnd - verseStart + 1;
+      const wordsOnPageSoFar = verseStart - currentPageStart;
+      const wordsIfWeAddVerse = wordsOnPageSoFar + verseWordCount;
+      // If adding this verse would exceed wordsPerPage and we already have content on this page, start next page
+      if (
+        wordsIfWeAddVerse > wordsPerPage &&
+        wordsOnPageSoFar > 0
+      ) {
+        pageStarts.push(verseStart);
+        currentPageStart = verseStart;
+      }
+      // If verse alone is longer than wordsPerPage, it gets its own page (already started above or will fill current)
+    }
+    return pageStarts;
+  }, [useWordsPerPage, wordsPerPage, allWordEntries.length, verseStartIndices]);
+
   const totalPages = useMemo(() => {
     if (useWordsPerPage) {
-      return Math.max(1, Math.ceil(allWordEntries.length / wordsPerPage));
+      return Math.max(1, wordPageStarts.length);
     }
     return Math.max(1, Math.ceil(sortedVerses.length / versesPerPage));
-  }, [useWordsPerPage, allWordEntries.length, wordsPerPage, sortedVerses.length, versesPerPage]);
+  }, [useWordsPerPage, wordPageStarts.length, sortedVerses.length, versesPerPage]);
 
   const safePage = Math.min(currentPage, Math.max(0, totalPages - 1));
 
@@ -155,14 +195,16 @@ export function FullSurahText({
   );
 
   const pageWordEntries = useMemo(
-    () =>
-      useWordsPerPage
-        ? allWordEntries.slice(
-            safePage * wordsPerPage,
-            (safePage + 1) * wordsPerPage,
-          )
-        : [],
-    [useWordsPerPage, allWordEntries, safePage, wordsPerPage],
+    () => {
+      if (!useWordsPerPage) return [];
+      const start = wordPageStarts[safePage] ?? 0;
+      const end =
+        safePage + 1 < wordPageStarts.length
+          ? wordPageStarts[safePage + 1]!
+          : allWordEntries.length;
+      return allWordEntries.slice(start, end);
+    },
+    [useWordsPerPage, allWordEntries, safePage, wordPageStarts],
   );
 
   // Reset page when verses change - derive initial page from verses or word index
@@ -173,7 +215,15 @@ export function FullSurahText({
       const wordIndex = allWordEntries.findIndex(
         (e) => e.verseKey === highlightedVerseKey,
       );
-      return wordIndex >= 0 ? Math.floor(wordIndex / wordsPerPage) : 0;
+      if (wordIndex < 0) return 0;
+      // Find page that contains this word index (verse-aware boundaries)
+      const p = wordPageStarts.findIndex(
+        (start, i) =>
+          start <= wordIndex &&
+          (i + 1 >= wordPageStarts.length ||
+            wordIndex < wordPageStarts[i + 1]!),
+      );
+      return p >= 0 ? p : 0;
     }
     const verseIndex = sortedVerses.findIndex(
       (v) => v.verse.verseKey === highlightedVerseKey,
@@ -185,7 +235,7 @@ export function FullSurahText({
     versesPerPage,
     useWordsPerPage,
     allWordEntries,
-    wordsPerPage,
+    wordPageStarts,
   ]);
 
   // Update page when highlighted verse changes
