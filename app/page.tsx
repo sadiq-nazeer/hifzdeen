@@ -1,4 +1,4 @@
-import { BookOpen, Calculator, Headphones, GraduationCap, Sparkles } from "lucide-react";
+import { BookOpen, Calculator, Headphones, GraduationCap, Sparkles, Book, Mic } from "lucide-react";
 import Link from "next/link";
 import { FeatureCard } from "@/components/ui/FeatureCard";
 import { Hero } from "@/components/ui/Hero";
@@ -62,6 +62,28 @@ export default function Home() {
       <Hero
         title="HifzDeen"
         description="An immersive platform for Quran memorization, recitation, and listening. Experience the Holy Quran with beautiful recitations, translations, and interactive learning tools."
+        stats={[
+          {
+            label: "Surahs",
+            value: "114",
+            icon: <Book className="h-5 w-5" />,
+          },
+          {
+            label: "Features",
+            value: "4+",
+            icon: <Sparkles className="h-5 w-5" />,
+          },
+          {
+            label: "Reciters",
+            value: "Multiple",
+            icon: <Mic className="h-5 w-5" />,
+          },
+          {
+            label: "Calculator",
+            value: "Zakat",
+            icon: <Calculator className="h-5 w-5" />,
+          },
+        ]}
         primaryAction={{
           label: "Start Reciting",
           href: "/recite",
