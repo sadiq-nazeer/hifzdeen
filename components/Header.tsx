@@ -1,7 +1,15 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
+import { MobileNav } from "@/components/MobileNav";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { safeGetSession, decodeIdTokenClaims } from "@/lib/auth/session";
+
+const navItems = [
+  { href: "/recite", label: "Recite Quran" },
+  { href: "/listening", label: "Listen Quran" },
+  { href: "/hifz", label: "Memorize Quran" },
+  { href: "/zakat", label: "Zakat Calculator" },
+];
 
 export async function Header() {
   const cookieStore = await cookies();
@@ -16,7 +24,8 @@ export async function Header() {
       role="banner"
     >
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:h-16 sm:px-6">
-        <div className="flex min-w-0 items-center gap-6">
+        <div className="flex min-w-0 items-center gap-4">
+          <MobileNav items={navItems} />
           <Link
             href="/"
             className="text-lg font-semibold text-foreground no-underline transition hover:text-brand sm:text-xl"
@@ -24,30 +33,15 @@ export async function Header() {
             HifzDeen.com
           </Link>
           <nav className="hidden items-center gap-4 sm:flex">
-            <Link
-              href="/recite"
-              className="text-sm text-foreground/80 underline-offset-4 transition hover:text-brand hover:underline"
-            >
-              Recite Quran 
-            </Link>
-            <Link
-              href="/listening"
-              className="text-sm text-foreground/80 underline-offset-4 transition hover:text-brand hover:underline"
-            >
-              Listen Quran
-            </Link>
-            <Link
-              href="/hifz"
-              className="text-sm text-foreground/80 underline-offset-4 transition hover:text-brand hover:underline"
-            >
-              Memorize Quran
-            </Link>
-            <Link
-              href="/zakat"
-              className="text-sm text-foreground/80 underline-offset-4 transition hover:text-brand hover:underline"
-            >
-              Zakat
-            </Link>
+            {navItems.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="text-sm text-foreground/80 underline-offset-4 transition hover:text-brand hover:underline"
+              >
+                {item.label}
+              </Link>
+            ))}
           </nav>
         </div>
         <div className="flex shrink-0 items-center gap-3">
