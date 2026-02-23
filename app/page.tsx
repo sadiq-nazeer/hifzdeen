@@ -64,37 +64,34 @@ export default function Home() {
         description="An immersive platform for Quran memorization, recitation, and listening. Experience the Holy Quran with beautiful recitations, translations, and interactive learning tools."
         stats={[
           {
-            label: "Surahs",
+            label: "Surahs with Translations",
             value: "114",
             icon: <Book className="h-5 w-5" />,
+            href: "/recite",
           },
           {
-            label: "Features",
-            value: "4+",
+            label: "Memorization made easy",
+            value: "Simple",
             icon: <Sparkles className="h-5 w-5" />,
+            href: "/hifz",
           },
           {
             label: "Reciters",
             value: "Multiple",
             icon: <Mic className="h-5 w-5" />,
+            href: "/listening",
           },
           {
             label: "Calculator",
             value: "Zakat",
             icon: <Calculator className="h-5 w-5" />,
+            href: "/zakat",
           },
         ]}
-        primaryAction={{
-          label: "Start Reciting",
-          href: "/recite",
-        }}
-        secondaryAction={{
-          label: "Start Listening",
-          href: "/listening",
-        }}
       />
 
       <Section
+        id="explore-features"
         title="Explore Features"
         subtitle="Choose how you want to engage with the Quran"
       >

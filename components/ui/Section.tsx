@@ -6,6 +6,7 @@ type SectionProps = {
   subtitle?: string;
   className?: string;
   headerClassName?: string;
+  id?: string;
 };
 
 export function Section({
@@ -14,9 +15,10 @@ export function Section({
   subtitle,
   className = "",
   headerClassName = "",
+  id,
 }: SectionProps) {
   return (
-    <section className={`space-y-4 ${className}`}>
+    <section id={id} className={`space-y-4 ${className}`}>
       {(title || subtitle) && (
         <header className={headerClassName}>
           {title && (
