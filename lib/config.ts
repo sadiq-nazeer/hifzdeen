@@ -21,6 +21,17 @@ const readEnv = (key: RequiredEnvKey): string => {
   return value;
 };
 
+export type TranslationProvider = "qf_with_legacy" | "alquran";
+
+const translationProviderOrDefault = (
+  value: string | undefined,
+): TranslationProvider => {
+  if (value === "alquran" || value === "qf_with_legacy") {
+    return value;
+  }
+  return "qf_with_legacy";
+};
+
 export const appConfig = {
   oauthTokenUrl: readEnv("QF_OAUTH_TOKEN_URL"),
   contentApiBaseUrl: readEnv("QF_CONTENT_API_BASE_URL"),
@@ -30,6 +41,11 @@ export const appConfig = {
     process.env.QF_DEFAULT_AUDIO_RECITER,
     7,
   ),
+  translationProvider: translationProviderOrDefault(
+    process.env.TRANSLATION_PROVIDER,
+  ),
+  alquranApiBaseUrl:
+    process.env.ALQURAN_API_BASE_URL ?? "https://api.alquran.cloud/v1",
 } as const;
 
 export type AppConfig = typeof appConfig;

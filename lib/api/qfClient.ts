@@ -1,5 +1,6 @@
 import "server-only";
 
+import { fetchSurahTranslation } from "@/lib/api/alquranClient";
 import { appConfig } from "@/lib/config";
 import type {
   ChapterAudioFile,
@@ -152,6 +153,7 @@ type CoachBundleParams = {
   toVerse?: number;
   perPage?: number;
   translationId?: number;
+  translationEdition?: string;
   tafsirId?: number;
   reciterId?: number;
 };
@@ -892,9 +894,19 @@ export const qfApi = {
         fromVerse = 1,
         toVerse,
         translationId,
+        translationEdition,
         tafsirId,
         reciterId,
       } = params;
+
+      const useAlquranForTranslation =
+        translationEdition !== undefined &&
+        translationEdition.length > 0 &&
+        appConfig.translationProvider === "alquran";
+
+      const effectiveTranslationId = useAlquranForTranslation
+        ? undefined
+        : translationId;
       const perPage = Math.max(params.perPage ?? 5, 1);
       const safeFrom = Math.max(fromVerse, 1);
       const safeTo = Math.max(toVerse ?? safeFrom + perPage - 1, safeFrom);
@@ -917,7 +929,7 @@ export const qfApi = {
               chapterId,
               perPage,
               page: pageNumber,
-              translationId,
+              translationId: effectiveTranslationId,
               tafsirId,
             });
           } catch (error) {
@@ -936,7 +948,24 @@ export const qfApi = {
 
       let combined = pages.flatMap((page) => page.verses);
 
-      if (translationId !== undefined) {
+      if (useAlquranForTranslation && translationEdition) {
+        try {
+          const alquranMap = await fetchSurahTranslation(
+            chapterId,
+            translationEdition,
+          );
+          combined = combined.map((entry) => {
+            const translation = alquranMap.get(entry.verse.verseKey);
+            if (!translation) return entry;
+            return { ...entry, translation };
+          });
+        } catch (error) {
+          console.warn(
+            `[buildCoachBundle] Failed to fetch alquran translation for edition=${translationEdition}`,
+            error,
+          );
+        }
+      } else if (translationId !== undefined) {
         const missingTranslationKeys = combined
           .filter((entry) => !entry.translation)
           .map((entry) => entry.verse.verseKey);

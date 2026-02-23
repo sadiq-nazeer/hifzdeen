@@ -29,6 +29,7 @@ export async function GET(request: Request) {
   const toVerse = toPositiveNumber(searchParams.get("toVerse"));
   const perPage = toPositiveNumber(searchParams.get("perPage"));
   const translationId = toPositiveNumber(searchParams.get("translationId"));
+  const translationEdition = searchParams.get("translationEdition") ?? undefined;
   const tafsirId = toPositiveNumber(searchParams.get("tafsirId"));
   const reciterId = toPositiveNumber(searchParams.get("reciterId"));
 
@@ -39,6 +40,10 @@ export async function GET(request: Request) {
       toVerse,
       perPage,
       translationId,
+      translationEdition:
+        translationEdition && translationEdition.length > 0
+          ? translationEdition
+          : undefined,
       tafsirId,
       reciterId,
     });

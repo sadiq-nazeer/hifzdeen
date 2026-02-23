@@ -8,6 +8,7 @@ export type CoachBundleParams = {
   toVerse?: number;
   perPage?: number;
   translationId?: number;
+  translationEdition?: string;
   tafsirId?: number;
   reciterId?: number;
 };
