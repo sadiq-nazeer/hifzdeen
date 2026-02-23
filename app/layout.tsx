@@ -1,9 +1,10 @@
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
 import { Header } from "@/components/Header";
 import { PwaRegister } from "@/components/PwaRegister";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { getSiteUrl } from "@/lib/siteUrl";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -21,11 +22,31 @@ const geistMono = Geist_Mono({
   preload: false,
 });
 
+const siteUrl = getSiteUrl();
+
 export const metadata: Metadata = {
-  title: "HifzDeen",
+  title: {
+    default: "HifzDeen — Quran Memorization, Recitation & Listening",
+    template: "%s | HifzDeen",
+  },
   description:
-    "An immersive memorization and recitation coach built with Quran.Foundation APIs.",
-  metadataBase: new URL("https://quranic-practice.local"),
+    "An immersive platform for Quran memorization (hifz), recitation, and listening. Learn and reflect with beautiful recitations, translations, and interactive tools.",
+  keywords: [
+    "HifzDeen",
+    "Quran memorization",
+    "hifz",
+    "Hifzul Quran",
+    "Quran recitation",
+    "Quran listening",
+    "zakat calculator",
+    "zakat calculator online",
+    "Quran learning",
+    "Quran Audio",
+    "Quran Mp3",
+  ],
+  authors: [{ name: "HifzDeen" }],
+  creator: "HifzDeen",
+  metadataBase: new URL(siteUrl),
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -33,16 +54,22 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
   },
   openGraph: {
-    title: "HifzDeen",
+    title: "HifzDeen — Quran Memorization, Recitation & Listening",
     description:
-      "Adaptive memorization journeys powered by Quran.Foundation data.",
+      "An immersive platform for Quran memorization, recitation, and listening. Experience the Holy Quran with beautiful recitations and interactive learning tools.",
     type: "website",
+    url: siteUrl,
+    siteName: "HifzDeen",
   },
   twitter: {
     card: "summary_large_image",
-    title: "HifzDeen",
+    title: "HifzDeen — Quran Memorization, Recitation & Listening",
     description:
-      "Interactive memorization and reflection journeys for the Quran.",
+      "An immersive platform for Quran memorization, recitation, and listening.",
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 };
 
