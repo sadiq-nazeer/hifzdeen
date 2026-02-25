@@ -3,8 +3,8 @@ import { buildPendingAuthCookieHeader } from "@/lib/auth/pendingAuthCookie";
 import { generatePkcePair } from "@/lib/auth/pkce";
 import { getQfOAuthConfig } from "@/lib/auth/qfOAuthConfig";
 
-// Request only scopes this client is allowed (QF config may restrict openid/user)
-const DEFAULT_SCOPE = "offline_access collection";
+// Request only scopes this client is allowed (QF config may restrict openid/user/collection)
+const DEFAULT_SCOPE = "offline_access";
 
 export async function GET() {
   try {
