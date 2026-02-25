@@ -3,8 +3,8 @@ import { buildPendingAuthCookieHeader } from "@/lib/auth/pendingAuthCookie";
 import { generatePkcePair } from "@/lib/auth/pkce";
 import { getQfOAuthConfig } from "@/lib/auth/qfOAuthConfig";
 
-// openid omitted: some QF clients are not allowed to request it; we still get access_token + refresh_token
-const DEFAULT_SCOPE = "offline_access user collection";
+// Request only scopes this client is allowed (QF config may restrict openid/user)
+const DEFAULT_SCOPE = "offline_access collection";
 
 export async function GET() {
   try {
