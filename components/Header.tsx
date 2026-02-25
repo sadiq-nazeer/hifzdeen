@@ -58,20 +58,20 @@ export async function Header() {
                   {displayName}
                 </span>
               )}
-              <Link
+              <a
                 href="/api/auth/logout"
                 className="text-sm text-foreground/80 underline-offset-4 hover:underline"
               >
                 Sign out
-              </Link>
+              </a>
             </>
           ) : (
-            <Link
+            <a
               href="/api/auth/login"
               className="text-sm text-foreground/80 underline-offset-4 hover:underline"
             >
               Sign in
-            </Link>
+            </a>
           )}
           <ThemeSwitcher />
         </div>
