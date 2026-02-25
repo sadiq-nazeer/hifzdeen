@@ -12,12 +12,24 @@ import { useCoachBundle } from "@/lib/hooks/useCoachBundle";
 import type { CoachBundleParams } from "@/lib/hooks/useCoachBundle";
 import { readReciteProgress } from "@/lib/storage/reciteProgress";
 
+const SAHIH_INTERNATIONAL_ID = 20;
+const TAMIL_LEGACY_ID = 50;
+const TAMIL_EDITION = "ta.tamil";
+const SINHALA_EDITION = "si.naseemismail";
+
+type TranslationChoice = "none" | "english" | "tamil" | "sinhala";
+
+const isAlquranProvider = (): boolean =>
+  process.env.NEXT_PUBLIC_TRANSLATION_PROVIDER === "alquran";
+
 export default function RecitePage() {
   const { chapters } = useChapters();
   const [params, setParams] = useState<CoachBundleParams>({
     chapterId: undefined,
     fromVerse: 1,
     toVerse: 1,
+    translationId: undefined,
+    translationEdition: undefined,
   });
 
   const effectiveChapterId = params.chapterId ?? chapters[0]?.id;
@@ -66,6 +78,72 @@ export default function RecitePage() {
     [chapters],
   );
 
+  const alquranEnabled = isAlquranProvider();
+
+  const translationOptions = useMemo(() => {
+    return [
+      { value: "none" as const, label: "None" },
+      { value: "english" as const, label: "English", subtitle: "(Sahih International)" },
+      { value: "tamil" as const, label: "Tamil", subtitle: "(Jan Trust)" },
+      ...(alquranEnabled
+        ? [{ value: "sinhala" as const, label: "Sinhala", subtitle: "Coming Soon(Naseem Ismail)" }]
+        : []),
+    ];
+  }, [alquranEnabled]);
+
+  const currentTranslationChoice = useMemo((): TranslationChoice => {
+    if (params.translationId === SAHIH_INTERNATIONAL_ID) return "english";
+    if (params.translationId === TAMIL_LEGACY_ID) return "tamil";
+    if (params.translationEdition === TAMIL_EDITION) return "tamil";
+    if (params.translationEdition === SINHALA_EDITION) return "sinhala";
+    return "none";
+  }, [params.translationId, params.translationEdition]);
+
+  const handleTranslationChange = (choice: TranslationChoice | undefined) => {
+    if (!choice || choice === "none") {
+      setParams((prev) => ({
+        ...prev,
+        translationId: undefined,
+        translationEdition: undefined,
+      }));
+      return;
+    }
+
+    if (choice === "english") {
+      setParams((prev) => ({
+        ...prev,
+        translationId: SAHIH_INTERNATIONAL_ID,
+        translationEdition: undefined,
+      }));
+      return;
+    }
+
+    if (choice === "tamil") {
+      if (isAlquranProvider()) {
+        setParams((prev) => ({
+          ...prev,
+          translationId: undefined,
+          translationEdition: TAMIL_EDITION,
+        }));
+      } else {
+        setParams((prev) => ({
+          ...prev,
+          translationId: TAMIL_LEGACY_ID,
+          translationEdition: undefined,
+        }));
+      }
+      return;
+    }
+
+    if (choice === "sinhala") {
+      setParams((prev) => ({
+        ...prev,
+        translationId: undefined,
+        translationEdition: SINHALA_EDITION,
+      }));
+    }
+  };
+
   return (
     <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-8 px-2 pb-12 pt-6 sm:px-6 lg:px-20 xl:px-24">
       <div className="flex items-start gap-4">
@@ -103,6 +181,16 @@ export default function RecitePage() {
                     }));
                   }
                 }}
+              />
+            </div>
+            <div className="flex-1 min-w-[200px]">
+              <SearchableSelect<TranslationChoice>
+                id="recite-translation"
+                label="Translation"
+                placeholder="Select translation"
+                options={translationOptions}
+                value={currentTranslationChoice}
+                onChange={handleTranslationChange}
               />
             </div>
           </div>

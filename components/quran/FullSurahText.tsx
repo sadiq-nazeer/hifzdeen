@@ -137,6 +137,14 @@ export function FullSurahText(props: FullSurahTextProps) {
     [verses],
   );
 
+  const verseByKey = useMemo(() => {
+    const map = new Map<string, CoachSessionVerse>();
+    for (const v of sortedVerses) {
+      map.set(v.verse.verseKey, v);
+    }
+    return map;
+  }, [sortedVerses]);
+
   // Assemble full text from each verse only (no full-text Quran): flatten into word entries
   const allWordEntries = useMemo((): VerseWordEntry[] => {
     const entries: VerseWordEntry[] = [];
@@ -205,6 +213,36 @@ export function FullSurahText(props: FullSurahTextProps) {
     },
     [useWordsPerPage, allWordEntries, safePage, fixedSectionStarts],
   );
+
+  const visibleVersesForTranslation = useMemo((): CoachSessionVerse[] => {
+    if (!useWordsPerPage) {
+      return pageVerses;
+    }
+    if (pageWordEntries.length === 0) return [];
+    const orderedKeys: string[] = [];
+    const seen = new Set<string>();
+    for (const entry of pageWordEntries) {
+      if (seen.has(entry.verseKey)) continue;
+      seen.add(entry.verseKey);
+      orderedKeys.push(entry.verseKey);
+    }
+    return orderedKeys
+      .map((k) => verseByKey.get(k))
+      .filter((v): v is CoachSessionVerse => v !== undefined);
+  }, [useWordsPerPage, pageVerses, pageWordEntries, verseByKey]);
+
+  const hasAnyVisibleTranslation = useMemo((): boolean => {
+    return visibleVersesForTranslation.some((v) => Boolean(v.translation?.text));
+  }, [visibleVersesForTranslation]);
+
+  const translationMeta = useMemo(() => {
+    const first = visibleVersesForTranslation.find((v) => v.translation != null)?.translation;
+    if (!first) return null;
+    return {
+      languageName: first.languageName,
+      resourceName: first.resourceName,
+    };
+  }, [visibleVersesForTranslation]);
 
   /** Inline: show verse number at end of section only when verse is finished in this section. */
   const inlineVerseFinishedInSection = useMemo(() => {
@@ -722,6 +760,38 @@ export function FullSurahText(props: FullSurahTextProps) {
         </div>
       </div>
 
+      {/* Translation display (below Arabic section) */}
+      {hasAnyVisibleTranslation ? (
+        <div className="rounded-xl border border-white/10 bg-surface-muted/20 p-4" dir="ltr">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-foreground-muted">
+              Translation
+            </p>
+            {translationMeta ? (
+              <p className="text-xs text-foreground-muted">
+                {translationMeta.languageName} • {translationMeta.resourceName}
+              </p>
+            ) : null}
+          </div>
+          <p className="mt-3 text-sm leading-relaxed text-foreground">
+            {visibleVersesForTranslation.map((v, index) => {
+              const t = v.translation;
+              if (!t?.text) return null;
+              const isLast = index === visibleVersesForTranslation.length - 1;
+              return (
+                <Fragment key={v.verse.verseKey}>
+                  <span>{t.text}</span>{" "}
+                  <span className="inline-flex items-center justify-center align-middle verse-number-marker verse-number-marker--circle text-[11px] text-black">
+                    {v.orderInChapter}
+                  </span>
+                  {!isLast ? " " : null}
+                </Fragment>
+              );
+            })}
+          </p>
+        </div>
+      ) : null}
+
       {/* Pagination */}
       <div className="flex flex-wrap items-center justify-center gap-2">
         <div className="flex items-center gap-1.5">
@@ -890,6 +960,16 @@ export function FullSurahText(props: FullSurahTextProps) {
                     ? fullScreenSectionStarts[sectionIndex + 1]!
                     : allWordEntries.length;
                 const sectionWords = allWordEntries.slice(sectionStart, sectionEnd);
+                const sectionVerseKeys = Array.from(
+                  new Set(sectionWords.map((w) => w.verseKey)),
+                );
+                const sectionVerses = sectionVerseKeys
+                  .map((k) => verseByKey.get(k))
+                  .filter((v): v is CoachSessionVerse => v !== undefined);
+                const sectionHasTranslation = sectionVerses.some((v) =>
+                  Boolean(v.translation?.text),
+                );
+                const sectionMeta = sectionVerses.find((v) => v.translation != null)?.translation;
                 const lastEntry = sectionWords[sectionWords.length - 1];
                 const nextWordAfterSection = allWordEntries[sectionEnd];
                 const verseFinishedInSection =
@@ -979,6 +1059,36 @@ export function FullSurahText(props: FullSurahTextProps) {
                         </button>
                       ) : null}
                     </div>
+                    {sectionHasTranslation ? (
+                      <div className="mt-4 rounded-xl border border-white/10 bg-surface-muted/20 p-4 text-left" dir="ltr">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-foreground-muted">
+                            Translation
+                          </p>
+                          {sectionMeta ? (
+                            <p className="text-[10px] text-foreground-muted">
+                              {sectionMeta.languageName} • {sectionMeta.resourceName}
+                            </p>
+                          ) : null}
+                        </div>
+                        <p className="mt-2 text-sm leading-relaxed text-foreground">
+                          {sectionVerses.map((v, index) => {
+                            const t = v.translation;
+                            if (!t?.text) return null;
+                            const isLast = index === sectionVerses.length - 1;
+                            return (
+                              <Fragment key={v.verse.verseKey}>
+                                <span>{t.text}</span>{" "}
+                                <span className="inline-flex items-center justify-center align-middle verse-number-marker verse-number-marker--circle text-[11px] text-black">
+                                  {v.orderInChapter}
+                                </span>
+                                {!isLast ? " " : null}
+                              </Fragment>
+                            );
+                          })}
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
                 );
               })}

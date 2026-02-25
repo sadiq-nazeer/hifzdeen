@@ -41,18 +41,18 @@ const features = [
 
 const upcomingFeatures = [
   {
-    title: "Deep Study",
+    title: "Hadith Collections (Coming Soon)",
     description:
-      "Trace tafsir, translations, and linguistic layers after each successful recitation.",
-    href: "/vision",
-    cta: "Preview Brief",
+      "Browse and study authentic Hadith collections with clear translations and references. This feature will be available soon, in shaa Allah.",
+    href: "#",
+    cta: "Coming Soon",
   },
   {
-    title: "Narrative Journey",
+    title: "Islamic Stories (Coming Soon)",
     description:
-      "Progress through thematic arcs like Hijrah or Mercy, visualized as immersive journeys.",
-    href: "/vision#narrative",
-    cta: "See Roadmap",
+      "Discover inspiring stories from the lives of the Prophets, companions, and righteous people. This feature will be available soon, in shaa Allah.",
+    href: "#",
+    cta: "Coming Soon",
   },
 ];
 
@@ -122,8 +122,8 @@ export default async function Home({
       </Section>
 
       <Section
-        title="Coming Soon"
-        subtitle="Exciting features in development"
+        title="Hadiths & Islamic Stories"
+        subtitle="Authentic Hadith collections and inspiring Islamic stories (coming soon)"
         className="border-t border-foreground/10 pt-12"
       >
         <div className="grid gap-6 md:grid-cols-2">
