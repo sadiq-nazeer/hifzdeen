@@ -773,22 +773,20 @@ export function FullSurahText(props: FullSurahTextProps) {
               </p>
             ) : null}
           </div>
-          <p className="mt-3 text-sm leading-relaxed text-foreground">
-            {visibleVersesForTranslation.map((v, index) => {
+          <div className="mt-3 space-y-2 text-sm leading-relaxed text-foreground">
+            {visibleVersesForTranslation.map((v) => {
               const t = v.translation;
               if (!t?.text) return null;
-              const isLast = index === visibleVersesForTranslation.length - 1;
               return (
-                <Fragment key={v.verse.verseKey}>
-                  <span>{t.text}</span>{" "}
-                  <span className="inline-flex items-center justify-center align-middle verse-number-marker verse-number-marker--circle text-[11px] text-black">
+                <div key={v.verse.verseKey} className="flex items-start gap-2">
+                  <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center align-middle verse-number-marker verse-number-marker--circle text-[11px] text-black">
                     {v.orderInChapter}
                   </span>
-                  {!isLast ? " " : null}
-                </Fragment>
+                  <p className="m-0 flex-1">{t.text}</p>
+                </div>
               );
             })}
-          </p>
+          </div>
         </div>
       ) : null}
 
@@ -1071,22 +1069,23 @@ export function FullSurahText(props: FullSurahTextProps) {
                             </p>
                           ) : null}
                         </div>
-                        <p className="mt-2 text-sm leading-relaxed text-foreground">
-                          {sectionVerses.map((v, index) => {
+                        <div className="mt-2 space-y-2 text-sm leading-relaxed text-foreground">
+                          {sectionVerses.map((v) => {
                             const t = v.translation;
                             if (!t?.text) return null;
-                            const isLast = index === sectionVerses.length - 1;
                             return (
-                              <Fragment key={v.verse.verseKey}>
-                                <span>{t.text}</span>{" "}
-                                <span className="inline-flex items-center justify-center align-middle verse-number-marker verse-number-marker--circle text-[11px] text-black">
+                              <div
+                                key={v.verse.verseKey}
+                                className="flex items-start gap-2"
+                              >
+                                <span className="inline-flex h-5 w-5 flex-shrink-0 items-center justify-center align-middle verse-number-marker verse-number-marker--circle text-[11px] text-black">
                                   {v.orderInChapter}
                                 </span>
-                                {!isLast ? " " : null}
-                              </Fragment>
+                                <p className="m-0 flex-1">{t.text}</p>
+                              </div>
                             );
                           })}
-                        </p>
+                        </div>
                       </div>
                     ) : null}
                   </div>
