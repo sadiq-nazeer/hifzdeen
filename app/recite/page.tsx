@@ -3,12 +3,14 @@
 import { BookOpen, ChevronDown, Volume2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { FullSurahText } from "@/components/quran/FullSurahText";
+import { SurahLoadingSkeleton } from "@/components/quran/SurahLoadingSkeleton";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Card } from "@/components/ui/Card";
 import { Section } from "@/components/ui/Section";
 import { useChapters } from "@/lib/hooks/useChapters";
 import { useCoachBundle } from "@/lib/hooks/useCoachBundle";
 import type { CoachBundleParams } from "@/lib/hooks/useCoachBundle";
+import { readReciteProgress } from "@/lib/storage/reciteProgress";
 
 export default function RecitePage() {
   const { chapters } = useChapters();
@@ -44,6 +46,14 @@ export default function RecitePage() {
   );
 
   const [guideOpen, setGuideOpen] = useState(false);
+
+  const restoredPage = useMemo(() => {
+    const progress = readReciteProgress();
+    if (!progress || progress.chapterId !== effectiveChapterId) {
+      return 0;
+    }
+    return progress.pageIndex;
+  }, [effectiveChapterId]);
 
   const chapterOptions = useMemo(
     () =>
@@ -98,11 +108,7 @@ export default function RecitePage() {
           </div>
         </Card>
 
-        {isLoading && (
-          <Card variant="muted" className="p-8 text-center">
-            <p className="text-foreground-muted">Loading surah…</p>
-          </Card>
-        )}
+        {isLoading && <SurahLoadingSkeleton />}
 
         {isError && (
           <Card variant="muted" className="border-red-500/20 bg-red-500/10 p-6">
@@ -171,8 +177,15 @@ export default function RecitePage() {
                       <li className="flex gap-2">
                         <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden />
                         <span>
-                          <strong className="text-foreground">Pages</strong> — use Previous and Next
-                          to move through the surah in sections.
+                          <strong className="text-foreground">Sections</strong> — use Previous and Next
+                          to move through the surah; progress is saved automatically.
+                        </span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden />
+                        <span>
+                          <strong className="text-foreground">Bookmarks</strong> — save your place and
+                          jump back to saved sections from the bookmark list.
                         </span>
                       </li>
                     </ul>
@@ -181,7 +194,13 @@ export default function RecitePage() {
               </div>
             </div>
             <Card variant="raised" className="px-1.5 py-2 sm:px-3 sm:py-4 md:px-6 md:py-6">
-              <FullSurahText verses={verses} wordsPerPage={50} />
+              <FullSurahText
+                verses={verses}
+                wordsPerPage={50}
+                chapterId={effectiveChapterId}
+                chapterName={selectedChapter?.nameSimple}
+                initialPage={restoredPage}
+              />
             </Card>
           </>
         )}

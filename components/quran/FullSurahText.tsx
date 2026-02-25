@@ -1,13 +1,18 @@
 "use client";
 
-import { Minus, Palette, Plus, Type, Maximize2, X } from "lucide-react";
-import { Fragment, startTransition, useEffect, useMemo, useRef, useState } from "react";
+import { Bookmark, BookmarkCheck, Minus, Palette, Plus, Type, Maximize2, X } from "lucide-react";
+import { Fragment, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getSurahTextColorOption,
   SURAH_TEXT_COLOR_OPTIONS,
   type SurahTextColorId,
 } from "@/components/quran/surahTextColors";
 import { buildPronounceableVerseWords } from "@/lib/quranWords";
+import {
+  addReciteBookmark,
+  readReciteBookmarks,
+  writeReciteProgress,
+} from "@/lib/storage/reciteProgress";
 import type { CoachSessionVerse } from "@/lib/types/quran";
 
 /** Split Uthmani Arabic verse into words (space-separated). */
@@ -34,6 +39,9 @@ const FULL_SURAH_TEXT_SIZES = [
 const FULL_SURAH_TEXT_SIZE_MIN = 0;
 const FULL_SURAH_TEXT_SIZE_MAX = FULL_SURAH_TEXT_SIZES.length - 1;
 
+/** In full-screen mode, each section has exactly this many words (may break mid-verse). */
+const FULL_SCREEN_SECTION_SIZE = 50;
+
 /** Single word entry when assembling text from verses only (no full-text Quran). */
 type VerseWordEntry = {
   word: string;
@@ -57,29 +65,43 @@ type FullSurahTextProps = {
   defaultTextColor?: SurahTextColorId;
   /** Default highlight (current ayah) text color */
   defaultHighlightColor?: SurahTextColorId;
+  /** Optional: chapter id for progress and bookmarks persistence */
+  chapterId?: number;
+  /** Optional: chapter name for bookmark labels */
+  chapterName?: string;
+  /** Optional: initial page index (e.g. from restored progress) */
+  initialPage?: number;
   className?: string;
 };
 
-export function FullSurahText({
-  verses,
-  highlightedVerseKey,
-  versesPerPage = 10,
-  wordsPerPage: wordsPerPageProp,
-  defaultTextSize = 1,
-  defaultTextColor = "foreground",
-  defaultHighlightColor = "brand",
-  className = "",
-}: FullSurahTextProps) {
+export function FullSurahText(props: FullSurahTextProps) {
+  const {
+    verses,
+    highlightedVerseKey,
+    versesPerPage = 10,
+    wordsPerPage: wordsPerPageProp,
+    defaultTextSize = 1,
+    defaultTextColor = "foreground",
+    defaultHighlightColor = "brand",
+    chapterId,
+    chapterName,
+    className = "",
+  } = props;
+
+  const initialPageFromProps = props.initialPage;
   const wordsPerPage = wordsPerPageProp ?? 0;
   const useWordsPerPage = wordsPerPage > 0;
   const [textSizeIndex, setTextSizeIndex] = useState(defaultTextSize);
   const [textColor, setTextColor] = useState<SurahTextColorId>(defaultTextColor);
   const [highlightColor, setHighlightColor] = useState<SurahTextColorId>(defaultHighlightColor);
-  const [currentPage, setCurrentPage] = useState(0);
+  const [currentPage, setCurrentPage] = useState(initialPageFromProps ?? 0);
   const [colorDropdownOpen, setColorDropdownOpen] = useState(false);
   const [fullScreenOpen, setFullScreenOpen] = useState(false);
+  const [fullScreenCurrentSection, setFullScreenCurrentSection] = useState(0);
   const [playingWordKey, setPlayingWordKey] = useState<string | null>(null);
   const colorDropdownRef = useRef<HTMLDivElement>(null);
+  const fullScreenScrollRef = useRef<HTMLDivElement>(null);
+  const fullScreenSectionRefs = useRef<(HTMLDivElement | null)[]>([]);
   const prevInitialPageRef = useRef<number>(-1);
   const wordAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -137,76 +159,29 @@ export function FullSurahText({
     return entries;
   }, [sortedVerses]);
 
-  // Word-based pagination: verse boundaries (start index of each verse in allWordEntries)
-  const verseStartIndices = useMemo((): number[] => {
-    const starts: number[] = [0];
-    for (let i = 1; i < allWordEntries.length; i++) {
-      if (allWordEntries[i].verseKey !== allWordEntries[i - 1].verseKey) {
-        starts.push(i);
-      }
+  /** Fixed 50-word section starts (used for both inline and full-screen; may break mid-verse). */
+  const fixedSectionStarts = useMemo((): number[] => {
+    if (allWordEntries.length === 0) return [0];
+    const starts: number[] = [];
+    for (let i = 0; i < allWordEntries.length; i += FULL_SCREEN_SECTION_SIZE) {
+      starts.push(i);
     }
     return starts;
-  }, [allWordEntries]);
+  }, [allWordEntries.length]);
 
-  // Word-based pagination: page start indices so we never break a verse (complete verse, then next page)
-  const wordPageStarts = useMemo((): number[] => {
-    if (!useWordsPerPage || wordsPerPage <= 0 || allWordEntries.length === 0) {
-      return [0];
-    }
-    const pageStarts: number[] = [0];
-    let currentPageStart = 0;
-    for (let v = 0; v < verseStartIndices.length; v++) {
-      const verseStart = verseStartIndices[v];
-      const verseEnd =
-        v + 1 < verseStartIndices.length
-          ? verseStartIndices[v + 1] - 1
-          : allWordEntries.length - 1;
-      const verseWordCount = verseEnd - verseStart + 1;
-      const wordsOnPageSoFar = verseStart - currentPageStart;
-      const wordsIfWeAddVerse = wordsOnPageSoFar + verseWordCount;
-      // If adding this verse would exceed wordsPerPage and we already have content on this page, start next page
-      if (
-        wordsIfWeAddVerse > wordsPerPage &&
-        wordsOnPageSoFar > 0
-      ) {
-        pageStarts.push(verseStart);
-        currentPageStart = verseStart;
-      }
-      // If verse alone is longer than wordsPerPage, it gets its own page (already started above or will fill current)
-    }
-    return pageStarts;
-  }, [useWordsPerPage, wordsPerPage, allWordEntries.length, verseStartIndices]);
+  const totalSections = fixedSectionStarts.length;
 
   const totalPages = useMemo(() => {
     if (useWordsPerPage) {
-      return Math.max(1, wordPageStarts.length);
+      return Math.max(1, totalSections);
     }
     return Math.max(1, Math.ceil(sortedVerses.length / versesPerPage));
-  }, [useWordsPerPage, wordPageStarts.length, sortedVerses.length, versesPerPage]);
+  }, [useWordsPerPage, totalSections, sortedVerses.length, versesPerPage]);
+
+  const fullScreenSectionStarts = fixedSectionStarts;
+  const fullScreenTotalSections = totalSections;
 
   const safePage = Math.min(currentPage, Math.max(0, totalPages - 1));
-
-  // For full-screen: verse index -> page index (so we can show gaps between pages)
-  const verseToPageIndex = useMemo((): number[] => {
-    if (useWordsPerPage) {
-      return verseStartIndices.map((wordStart) => {
-        const p = wordPageStarts.findIndex(
-          (start, i) =>
-            start <= wordStart &&
-            (i + 1 >= wordPageStarts.length ||
-              wordStart < wordPageStarts[i + 1]!),
-        );
-        return p >= 0 ? p : 0;
-      });
-    }
-    return sortedVerses.map((_, v) => Math.floor(v / versesPerPage));
-  }, [
-    useWordsPerPage,
-    verseStartIndices,
-    wordPageStarts,
-    sortedVerses,
-    versesPerPage,
-  ]);
 
   const pageVerses = useMemo(
     () =>
@@ -220,33 +195,91 @@ export function FullSurahText({
   const pageWordEntries = useMemo(
     () => {
       if (!useWordsPerPage) return [];
-      const start = wordPageStarts[safePage] ?? 0;
+      const start = fixedSectionStarts[safePage] ?? 0;
       const end =
-        safePage + 1 < wordPageStarts.length
-          ? wordPageStarts[safePage + 1]!
+        safePage + 1 < fixedSectionStarts.length
+          ? fixedSectionStarts[safePage + 1]!
           : allWordEntries.length;
       return allWordEntries.slice(start, end);
     },
-    [useWordsPerPage, allWordEntries, safePage, wordPageStarts],
+    [useWordsPerPage, allWordEntries, safePage, fixedSectionStarts],
   );
+
+  /** Inline: show verse number at end of section only when verse is finished in this section. */
+  const inlineVerseFinishedInSection = useMemo(() => {
+    if (!useWordsPerPage || pageWordEntries.length === 0) return true;
+    const sectionEnd =
+      safePage + 1 < fixedSectionStarts.length
+        ? fixedSectionStarts[safePage + 1]!
+        : allWordEntries.length;
+    const lastEntry = pageWordEntries[pageWordEntries.length - 1];
+    const nextWord = allWordEntries[sectionEnd];
+    return (
+      lastEntry != null &&
+      (nextWord == null || nextWord.verseKey !== lastEntry.verseKey)
+    );
+  }, [useWordsPerPage, pageWordEntries, safePage, fixedSectionStarts, allWordEntries]);
+
+  const [bookmarkListVersion, setBookmarkListVersion] = useState(0);
+  const bookmarksForChapter = useMemo(() => {
+    void bookmarkListVersion;
+    if (chapterId == null) return [];
+    return readReciteBookmarks().filter((b) => b.chapterId === chapterId);
+  }, [chapterId, bookmarkListVersion]);
+
+  /** At most one bookmark per chapter; used for "Go to bookmark" button. */
+  const bookmarkForCurrentChapter = bookmarksForChapter[0] ?? null;
+
+  const handleSaveBookmark = useCallback(() => {
+    if (chapterId == null) return;
+    addReciteBookmark({
+      chapterId,
+      pageIndex: safePage,
+      chapterName,
+    });
+    setBookmarkListVersion((v) => v + 1);
+  }, [chapterId, safePage, chapterName]);
+
+  const handleGoToBookmark = useCallback(() => {
+    if (bookmarkForCurrentChapter == null || bookmarkForCurrentChapter.chapterId !== chapterId) return;
+    setCurrentPage(bookmarkForCurrentChapter.pageIndex);
+  }, [chapterId, bookmarkForCurrentChapter]);
+
+  const handleGoToBookmarkFullScreen = useCallback(() => {
+    if (bookmarkForCurrentChapter == null || bookmarkForCurrentChapter.chapterId !== chapterId) return;
+    setFullScreenCurrentSection(bookmarkForCurrentChapter.pageIndex);
+    const scrollContainer = fullScreenScrollRef.current;
+    const sectionRefs = fullScreenSectionRefs.current;
+    const el = sectionRefs[bookmarkForCurrentChapter.pageIndex];
+    if (scrollContainer && el) {
+      el.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+  }, [chapterId, bookmarkForCurrentChapter]);
+
+  /** Bookmark current section in full-screen (uses fullScreenCurrentSection). */
+  const handleSaveBookmarkFullScreen = useCallback(() => {
+    if (chapterId == null) return;
+    addReciteBookmark({
+      chapterId,
+      pageIndex: fullScreenCurrentSection,
+      chapterName,
+    });
+    setBookmarkListVersion((v) => v + 1);
+  }, [chapterId, fullScreenCurrentSection, chapterName]);
 
   // Reset page when verses change - derive initial page from verses or word index
   const versesKey = sortedVerses.map((v) => v.verse.verseKey).join(",");
   const initialPage = useMemo(() => {
+    if (initialPageFromProps != null && initialPageFromProps >= 0) {
+      return Math.min(initialPageFromProps, Math.max(0, totalPages - 1));
+    }
     if (!highlightedVerseKey || sortedVerses.length === 0) return 0;
     if (useWordsPerPage) {
       const wordIndex = allWordEntries.findIndex(
         (e) => e.verseKey === highlightedVerseKey,
       );
       if (wordIndex < 0) return 0;
-      // Find page that contains this word index (verse-aware boundaries)
-      const p = wordPageStarts.findIndex(
-        (start, i) =>
-          start <= wordIndex &&
-          (i + 1 >= wordPageStarts.length ||
-            wordIndex < wordPageStarts[i + 1]!),
-      );
-      return p >= 0 ? p : 0;
+      return Math.min(totalSections - 1, Math.floor(wordIndex / FULL_SCREEN_SECTION_SIZE));
     }
     const verseIndex = sortedVerses.findIndex(
       (v) => v.verse.verseKey === highlightedVerseKey,
@@ -258,7 +291,9 @@ export function FullSurahText({
     versesPerPage,
     useWordsPerPage,
     allWordEntries,
-    wordPageStarts,
+    initialPageFromProps,
+    totalPages,
+    totalSections,
   ]);
 
   // Update page when highlighted verse changes
@@ -272,13 +307,12 @@ export function FullSurahText({
     }
   }, [initialPage]);
 
-  // Reset to first page when verses change (different surah)
+  // Reset to first page when verses change (different surah); use initialPage from parent when provided
   useEffect(() => {
-    // Intentional: reset pagination when surah changes
     startTransition(() => {
-      setCurrentPage(0);
+      setCurrentPage(initialPageFromProps ?? 0);
     });
-  }, [versesKey]);
+  }, [versesKey, initialPageFromProps]);
 
   // Close color dropdown when clicking outside
   useEffect(() => {
@@ -311,6 +345,73 @@ export function FullSurahText({
     };
   }, [fullScreenOpen]);
 
+  // Persist progress when chapter and page change
+  useEffect(() => {
+    if (chapterId != null && chapterId > 0) {
+      writeReciteProgress({ chapterId, pageIndex: safePage });
+    }
+  }, [chapterId, safePage]);
+
+  // Full-screen: when opening, set current section from restored progress (or inline page) and scroll to it
+  useEffect(() => {
+    if (!fullScreenOpen || fullScreenTotalSections === 0) return;
+    const sectionIndex = Math.min(
+      fullScreenTotalSections - 1,
+      Math.max(0, initialPageFromProps ?? safePage ?? 0),
+    );
+    const scrollContainer = fullScreenScrollRef.current;
+    const sectionRefs = fullScreenSectionRefs.current;
+    const scrollToSection = () => {
+      const el = sectionRefs[sectionIndex];
+      if (scrollContainer && el) {
+        el.scrollIntoView({ block: "start", behavior: "auto" });
+      }
+    };
+    const id = setTimeout(() => {
+      setFullScreenCurrentSection(sectionIndex);
+      setTimeout(scrollToSection, 50);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [
+    fullScreenOpen,
+    fullScreenTotalSections,
+    initialPageFromProps,
+    safePage,
+  ]);
+
+  // Full-screen: scroll spy – update current section and persist progress
+  useEffect(() => {
+    if (!fullScreenOpen || fullScreenTotalSections === 0) return;
+    const scrollContainer = fullScreenScrollRef.current;
+    if (!scrollContainer) return;
+
+    const onScroll = () => {
+      const refs = fullScreenSectionRefs.current;
+      const scrollTop = scrollContainer.scrollTop;
+      const viewportMid = scrollTop + scrollContainer.clientHeight / 2;
+      let sectionIndex = 0;
+      for (let i = 0; i < fullScreenTotalSections; i++) {
+        const el = refs[i];
+        if (el && el.offsetTop + el.offsetHeight > viewportMid) {
+          sectionIndex = i;
+          break;
+        }
+        sectionIndex = i;
+      }
+      setFullScreenCurrentSection((prev) => (prev !== sectionIndex ? sectionIndex : prev));
+    };
+
+    scrollContainer.addEventListener("scroll", onScroll, { passive: true });
+    return () => scrollContainer.removeEventListener("scroll", onScroll);
+  }, [fullScreenOpen, fullScreenTotalSections]);
+
+  // Full-screen: persist progress when visible section changes
+  useEffect(() => {
+    if (fullScreenOpen && chapterId != null && chapterId > 0) {
+      writeReciteProgress({ chapterId, pageIndex: fullScreenCurrentSection });
+    }
+  }, [fullScreenOpen, chapterId, fullScreenCurrentSection]);
+
   if (sortedVerses.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-white/10 bg-surface-muted/30 p-8 text-center">
@@ -328,9 +429,6 @@ export function FullSurahText({
       <div className="flex flex-nowrap items-center justify-between gap-2">
         <p className="text-xs font-semibold text-foreground-muted shrink-0">
           {sortedVerses.length} ayats
-          {useWordsPerPage
-            ? ` • ${allWordEntries.length} words`
-            : ""}
         </p>
         <div className="flex flex-nowrap items-center gap-2 shrink-0">
         <div className="flex items-center rounded-lg border border-white/10 bg-white/5">
@@ -495,7 +593,7 @@ export function FullSurahText({
                     </Fragment>
                   );
                 })}
-                {pageWordEntries.length > 0 ? (
+                {pageWordEntries.length > 0 && inlineVerseFinishedInSection ? (
                   <>
                     <span
                       className="verse-number-marker verse-number-marker--circle"
@@ -566,28 +664,67 @@ export function FullSurahText({
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-center gap-1.5">
-        <button
-          type="button"
-          disabled={safePage <= 0}
-          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-white/5"
-          onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
-        >
-          Previous
-        </button>
-        <span className="text-xs tabular-nums text-foreground-muted">
-          Page {safePage + 1} of {totalPages}
-        </span>
-        <button
-          type="button"
-          disabled={safePage >= totalPages - 1}
-          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-white/5"
-          onClick={() =>
-            setCurrentPage((p) => Math.min(totalPages - 1, p + 1))
-          }
-        >
-          Next
-        </button>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={safePage <= 0}
+            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-white/5"
+            onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+          >
+            Previous
+          </button>
+          <span className="text-xs tabular-nums text-foreground-muted">
+            Section {safePage + 1} of {totalPages}
+          </span>
+          <button
+            type="button"
+            disabled={safePage >= totalPages - 1}
+            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-white/10 disabled:opacity-40 disabled:hover:bg-white/5"
+            onClick={() =>
+              setCurrentPage((p) => Math.min(totalPages - 1, p + 1))
+            }
+          >
+            Next
+          </button>
+        </div>
+        {chapterId != null && (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={safePage === bookmarkForCurrentChapter?.pageIndex}
+              className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs font-medium text-foreground transition hover:border-white/20 hover:bg-white/10 disabled:cursor-default disabled:opacity-50 disabled:hover:border-white/10 disabled:hover:bg-white/5"
+              onClick={handleSaveBookmark}
+              aria-label="Save bookmark at current section"
+              title="Bookmark current section"
+            >
+              <BookmarkCheck
+                className={`h-3.5 w-3.5 ${safePage === bookmarkForCurrentChapter?.pageIndex ? "fill-current" : ""}`}
+                aria-hidden
+              />
+              Bookmark
+            </button>
+            {bookmarkForCurrentChapter != null ? (
+              <button
+                type="button"
+                className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium transition ${
+                  safePage === bookmarkForCurrentChapter.pageIndex
+                    ? "border-brand bg-brand/20 text-brand cursor-default"
+                    : "border-white/10 bg-white/5 text-foreground hover:border-white/20 hover:bg-white/10"
+                }`}
+                onClick={handleGoToBookmark}
+                aria-label={safePage === bookmarkForCurrentChapter.pageIndex ? "This section is bookmarked" : "Go to bookmarked section"}
+                title={safePage === bookmarkForCurrentChapter.pageIndex ? "This section is bookmarked" : `Go to Section ${bookmarkForCurrentChapter.pageIndex + 1}`}
+              >
+                <Bookmark
+                  className={`h-3.5 w-3.5 ${safePage === bookmarkForCurrentChapter.pageIndex ? "fill-current" : ""}`}
+                  aria-hidden
+                />
+                {safePage === bookmarkForCurrentChapter.pageIndex ? "This is bookmarked" : "Go to bookmark"}
+              </button>
+            ) : null}
+          </div>
+        )}
       </div>
 
       {/* Full-screen scrollable preview */}
@@ -598,87 +735,148 @@ export function FullSurahText({
           aria-modal="true"
           aria-label="Full surah full screen preview"
         >
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 bg-surface-muted/30 px-4 py-3">
-            <p className="text-sm font-semibold text-foreground-muted">
-              Full Surah • {sortedVerses.length} ayats
-              {useWordsPerPage ? ` • ${allWordEntries.length} words` : ""}
-            </p>
-            <button
-              type="button"
-              className="rounded-lg border border-white/10 bg-white/5 p-2 text-foreground transition hover:bg-white/10"
-              onClick={() => setFullScreenOpen(false)}
-              aria-label="Close full screen"
-            >
-              <X className="h-5 w-5" aria-hidden />
-            </button>
+          <div className="flex shrink-0 items-center justify-between gap-4 border-b border-white/10 bg-surface-muted/30 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate">
+                {chapterName ?? "Surah"} • Section {fullScreenCurrentSection + 1} of {fullScreenTotalSections}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {chapterId != null && (
+                <>
+                  <button
+                    type="button"
+                    disabled={fullScreenCurrentSection === bookmarkForCurrentChapter?.pageIndex}
+                    className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:border-white/20 hover:bg-white/10 disabled:cursor-default disabled:opacity-50 disabled:hover:border-white/10 disabled:hover:bg-white/5"
+                    onClick={handleSaveBookmarkFullScreen}
+                    aria-label="Save bookmark at current section"
+                  >
+                    <BookmarkCheck
+                      className={`h-4 w-4 ${fullScreenCurrentSection === bookmarkForCurrentChapter?.pageIndex ? "fill-current" : ""}`}
+                      aria-hidden
+                    />
+                    Bookmark
+                  </button>
+                  {bookmarkForCurrentChapter != null ? (
+                    <button
+                      type="button"
+                      className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                        fullScreenCurrentSection === bookmarkForCurrentChapter.pageIndex
+                          ? "border-brand bg-brand/20 text-brand cursor-default"
+                          : "border-white/10 bg-white/5 text-foreground hover:border-white/20 hover:bg-white/10"
+                      }`}
+                      onClick={handleGoToBookmarkFullScreen}
+                      aria-label={fullScreenCurrentSection === bookmarkForCurrentChapter.pageIndex ? "This section is bookmarked" : "Go to bookmarked section"}
+                      title={fullScreenCurrentSection === bookmarkForCurrentChapter.pageIndex ? "This section is bookmarked" : `Go to Section ${bookmarkForCurrentChapter.pageIndex + 1}`}
+                    >
+                      <Bookmark
+                        className={`h-4 w-4 ${fullScreenCurrentSection === bookmarkForCurrentChapter.pageIndex ? "fill-current" : ""}`}
+                        aria-hidden
+                      />
+                      {fullScreenCurrentSection === bookmarkForCurrentChapter.pageIndex ? "This is bookmarked" : "Go to bookmark"}
+                    </button>
+                  ) : null}
+                </>
+              )}
+              <button
+                type="button"
+                className="rounded-lg border border-white/10 bg-white/5 p-2 text-foreground transition hover:bg-white/10"
+                onClick={() => setFullScreenOpen(false)}
+                aria-label="Close full screen"
+              >
+                <X className="h-5 w-5" aria-hidden />
+              </button>
+            </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div
+            ref={fullScreenScrollRef}
+            className="min-h-0 flex-1 overflow-y-auto"
+          >
             <div
               className={`mx-auto max-w-4xl px-4 py-6 pb-12 text-center ${FULL_SURAH_TEXT_SIZES[textSizeIndex]}`}
               dir="rtl"
+              style={{ lineHeight: "2.5" }}
             >
-              {sortedVerses.map((verse, verseIndex) => {
-                const isHighlighted = verse.verse.verseKey === highlightedVerseKey;
-                const apiWords = buildPronounceableVerseWords(verse.verse.words);
-                const verseWords =
-                  apiWords.length > 0
-                    ? apiWords.map((w) => w.textUthmani)
-                    : splitVerseIntoWords(verse.verse.textUthmani);
-                const baseClassName = isHighlighted
-                  ? selectedHighlightOption.textClass
-                  : selectedTextOption.textClass;
-                const nextVersePage =
-                  verseIndex + 1 < verseToPageIndex.length
-                    ? verseToPageIndex[verseIndex + 1]
-                    : -1;
-                const thisVersePage = verseToPageIndex[verseIndex] ?? 0;
-                const showPageGapAfter =
-                  nextVersePage >= 0 && nextVersePage !== thisVersePage;
+              {fullScreenSectionStarts.map((sectionStart, sectionIndex) => {
+                const sectionEnd =
+                  sectionIndex + 1 < fullScreenSectionStarts.length
+                    ? fullScreenSectionStarts[sectionIndex + 1]!
+                    : allWordEntries.length;
+                const sectionWords = allWordEntries.slice(sectionStart, sectionEnd);
+                const lastEntry = sectionWords[sectionWords.length - 1];
+                const nextWordAfterSection = allWordEntries[sectionEnd];
+                const verseFinishedInSection =
+                  lastEntry != null &&
+                  (nextWordAfterSection == null ||
+                    nextWordAfterSection.verseKey !== lastEntry.verseKey);
 
                 return (
-                  <Fragment key={verse.verse.verseKey}>
-                    <span className={baseClassName}>
-                      {verseWords.length > 0
-                        ? verseWords.map((word, i) => (
-                            <span key={i}>
-                              {apiWords[i]?.audioUrl ? (
+                  <div
+                    key={sectionIndex}
+                    ref={(el) => {
+                      fullScreenSectionRefs.current[sectionIndex] = el;
+                    }}
+                    data-section-index={sectionIndex}
+                    className="py-6"
+                  >
+                    <p className="mb-2 text-xs font-semibold text-foreground-muted">
+                      Section {sectionIndex + 1}
+                    </p>
+                    <div className="surah-paragraph">
+                      {sectionWords.map((entry, i) => {
+                        const isHighlighted = entry.verseKey === highlightedVerseKey;
+                        const prevEntry = sectionWords[i - 1];
+                        const showVerseMarker =
+                          !prevEntry || prevEntry.verseKey !== entry.verseKey;
+                        const wordKey =
+                          entry.wordId != null
+                            ? `${entry.verseKey}-${entry.wordId}`
+                            : `${entry.verseKey}-${sectionStart + i}`;
+                        const baseClassName = isHighlighted
+                          ? selectedHighlightOption.textClass
+                          : selectedTextOption.textClass;
+                        return (
+                          <Fragment key={`${entry.verseKey}-${sectionIndex}-${i}`}>
+                            {showVerseMarker && prevEntry != null ? (
+                              <span
+                                className="verse-number-marker verse-number-marker--circle"
+                                aria-label={`Ayah ${toArabicNumerals(prevEntry.orderInChapter)}`}
+                              >
+                                {toArabicNumerals(prevEntry.orderInChapter)}
+                              </span>
+                            ) : null}
+                            {showVerseMarker && prevEntry != null ? " " : null}
+                            <span className={baseClassName}>
+                              {entry.audioUrl ? (
                                 <button
                                   type="button"
-                                  className={`m-0 inline border-0 bg-transparent p-0 font-inherit leading-inherit transition-colors hover:opacity-80 ${playingWordKey === `${verse.verse.verseKey}-${apiWords[i].id}` ? "opacity-100 text-brand" : ""}`}
+                                  className={`m-0 inline border-0 bg-transparent p-0 font-inherit leading-inherit transition-colors hover:opacity-80 ${playingWordKey === wordKey ? "opacity-100 text-brand" : ""}`}
                                   onClick={() =>
-                                    playWordAudio(
-                                      apiWords[i].audioUrl,
-                                      `${verse.verse.verseKey}-${apiWords[i].id}`,
-                                    )
+                                    playWordAudio(entry.audioUrl, wordKey)
                                   }
                                   title="Play word audio"
-                                  aria-label={`Play word audio: ${word}`}
+                                  aria-label={`Play word audio: ${entry.word}`}
                                 >
-                                  {word}
+                                  {entry.word}
                                 </button>
                               ) : (
-                                <span>{word}</span>
+                                <span>{entry.word}</span>
                               )}
-                              {i < verseWords.length - 1 ? "\u00A0" : null}
                             </span>
-                          ))
-                        : verse.verse.textUthmani}
-                    </span>
-                    <span
-                      className="verse-number-marker verse-number-marker--circle"
-                      aria-label={`Ayah ${verse.orderInChapter}`}
-                    >
-                      {toArabicNumerals(verse.orderInChapter)}
-                    </span>
-                    {" "}
-                    {showPageGapAfter ? (
-                      <div
-                        className="my-8 border-t border-white/10"
-                        aria-hidden
-                        style={{ minHeight: "2rem" }}
-                      />
-                    ) : null}
-                  </Fragment>
+                            {i < sectionWords.length - 1 ? "\u00A0" : null}
+                          </Fragment>
+                        );
+                      })}
+                      {sectionWords.length > 0 && verseFinishedInSection ? (
+                        <span
+                          className="verse-number-marker verse-number-marker--circle"
+                          aria-label={`Ayah ${toArabicNumerals(sectionWords[sectionWords.length - 1].orderInChapter)}`}
+                        >
+                          {toArabicNumerals(sectionWords[sectionWords.length - 1].orderInChapter)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
                 );
               })}
             </div>

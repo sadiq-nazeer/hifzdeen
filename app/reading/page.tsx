@@ -3,6 +3,7 @@
 import { BookOpen } from "lucide-react";
 import { useMemo, useState } from "react";
 import { FullSurahText } from "@/components/quran/FullSurahText";
+import { SurahLoadingSkeleton } from "@/components/quran/SurahLoadingSkeleton";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { Card } from "@/components/ui/Card";
 import { Section } from "@/components/ui/Section";
@@ -96,11 +97,7 @@ export default function ReadingPage() {
           </div>
         </Card>
 
-        {isLoading && (
-          <Card variant="muted" className="p-8 text-center">
-            <p className="text-foreground-muted">Loading surah…</p>
-          </Card>
-        )}
+        {isLoading && <SurahLoadingSkeleton />}
 
         {isError && (
           <Card variant="muted" className="border-red-500/20 bg-red-500/10 p-6">
