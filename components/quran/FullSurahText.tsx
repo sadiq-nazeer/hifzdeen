@@ -81,7 +81,7 @@ export function FullSurahText(props: FullSurahTextProps) {
     highlightedVerseKey,
     versesPerPage = 10,
     wordsPerPage: wordsPerPageProp,
-    defaultTextSize = 1,
+    defaultTextSize = 2,
     defaultTextColor = "foreground",
     defaultHighlightColor = "brand",
     chapterId,

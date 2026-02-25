@@ -82,8 +82,8 @@ export default function RecitePage() {
     return [
       { value: "none" as const, label: "None" },
       { value: "sahih" as const, label: "English (Sahih International)", subtitle: "English" },
-      { value: "tamil" as const, label: "Tamil (Jan Trust)" },
-      { value: "sinhala" as const, label: "Sinhala (Naseem Ismail)" },
+      { value: "tamil" as const, label: "Tamil (Jan Trust)", subtitle: "Tamil" },
+      { value: "sinhala" as const, label: "Sinhala (Naseem Ismail)", subtitle: "Sinhala" },
     ];
   }, []);
 
