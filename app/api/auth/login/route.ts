@@ -4,7 +4,7 @@ import { generatePkcePair } from "@/lib/auth/pkce";
 import { getQfOAuthConfig } from "@/lib/auth/qfOAuthConfig";
 
 // Request only scopes this client is allowed (QF config may restrict openid/user/collection)
-const DEFAULT_SCOPE = "offline_access";
+const DEFAULT_SCOPE = "offline_access user collection openid";
 
 export async function GET() {
   try {
