@@ -11,6 +11,7 @@ import { buildPronounceableVerseWords } from "@/lib/quranWords";
 import {
   addReciteBookmark,
   readReciteBookmarks,
+  removeReciteBookmark,
   writeReciteProgress,
 } from "@/lib/storage/reciteProgress";
 import type { CoachSessionVerse } from "@/lib/types/quran";
@@ -232,21 +233,34 @@ export function FullSurahText(props: FullSurahTextProps) {
 
   const handleSaveBookmark = useCallback(() => {
     if (chapterId == null) return;
+    const firstEntry = pageWordEntries[0];
     addReciteBookmark({
       chapterId,
       pageIndex: safePage,
       chapterName,
+      verseKey: firstEntry?.verseKey,
+      verseNumber: firstEntry?.orderInChapter,
     });
     setBookmarkListVersion((v) => v + 1);
-  }, [chapterId, safePage, chapterName]);
+  }, [chapterId, safePage, chapterName, pageWordEntries]);
 
   const handleGoToBookmark = useCallback(() => {
     if (bookmarkForCurrentChapter == null || bookmarkForCurrentChapter.chapterId !== chapterId) return;
+    if (safePage === bookmarkForCurrentChapter.pageIndex) {
+      removeReciteBookmark(bookmarkForCurrentChapter.id);
+      setBookmarkListVersion((v) => v + 1);
+      return;
+    }
     setCurrentPage(bookmarkForCurrentChapter.pageIndex);
-  }, [chapterId, bookmarkForCurrentChapter]);
+  }, [chapterId, bookmarkForCurrentChapter, safePage]);
 
   const handleGoToBookmarkFullScreen = useCallback(() => {
     if (bookmarkForCurrentChapter == null || bookmarkForCurrentChapter.chapterId !== chapterId) return;
+    if (fullScreenCurrentSection === bookmarkForCurrentChapter.pageIndex) {
+      removeReciteBookmark(bookmarkForCurrentChapter.id);
+      setBookmarkListVersion((v) => v + 1);
+      return;
+    }
     setFullScreenCurrentSection(bookmarkForCurrentChapter.pageIndex);
     const scrollContainer = fullScreenScrollRef.current;
     const sectionRefs = fullScreenSectionRefs.current;
@@ -254,18 +268,39 @@ export function FullSurahText(props: FullSurahTextProps) {
     if (scrollContainer && el) {
       el.scrollIntoView({ block: "start", behavior: "smooth" });
     }
-  }, [chapterId, bookmarkForCurrentChapter]);
+  }, [chapterId, bookmarkForCurrentChapter, fullScreenCurrentSection]);
 
   /** Bookmark current section in full-screen (uses fullScreenCurrentSection). */
   const handleSaveBookmarkFullScreen = useCallback(() => {
     if (chapterId == null) return;
+    const startIdx = fullScreenSectionStarts[fullScreenCurrentSection] ?? 0;
+    const firstEntry = allWordEntries[startIdx];
     addReciteBookmark({
       chapterId,
       pageIndex: fullScreenCurrentSection,
       chapterName,
+      verseKey: firstEntry?.verseKey,
+      verseNumber: firstEntry?.orderInChapter,
     });
     setBookmarkListVersion((v) => v + 1);
-  }, [chapterId, fullScreenCurrentSection, chapterName]);
+  }, [chapterId, fullScreenCurrentSection, chapterName, fullScreenSectionStarts, allWordEntries]);
+
+  /** Bookmark at a specific verse (e.g. when clicking a verse number). sectionIndex required in full-screen. */
+  const handleBookmarkAtVerse = useCallback(
+    (verseKey: string, verseNumber: number, sectionIndex?: number) => {
+      if (chapterId == null) return;
+      const page = sectionIndex ?? safePage;
+      addReciteBookmark({
+        chapterId,
+        pageIndex: page,
+        chapterName,
+        verseKey,
+        verseNumber,
+      });
+      setBookmarkListVersion((v) => v + 1);
+    },
+    [chapterId, safePage, chapterName],
+  );
 
   // Reset page when verses change - derive initial page from verses or word index
   const versesKey = sortedVerses.map((v) => v.verse.verseKey).join(",");
@@ -564,12 +599,20 @@ export function FullSurahText(props: FullSurahTextProps) {
                   return (
                     <Fragment key={`${entry.verseKey}-${i}`}>
                       {showVerseMarker && prevEntry != null ? (
-                        <span
-                          className="verse-number-marker verse-number-marker--circle"
-                          aria-label={`Ayah ${toArabicNumerals(prevEntry.orderInChapter)}`}
+                        <button
+                          type="button"
+                          className={`verse-number-marker verse-number-marker--circle cursor-pointer transition hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-2 focus:ring-offset-background ${
+                            bookmarkForCurrentChapter?.verseNumber === prevEntry.orderInChapter ? "verse-number-marker--bookmarked" : ""
+                          }`}
+                          aria-label={`Ayah ${toArabicNumerals(prevEntry.orderInChapter)} – click to bookmark`}
+                          title="Bookmark this verse"
+                          onClick={() =>
+                            chapterId != null &&
+                            handleBookmarkAtVerse(prevEntry.verseKey, prevEntry.orderInChapter)
+                          }
                         >
                           {toArabicNumerals(prevEntry.orderInChapter)}
-                        </span>
+                        </button>
                       ) : null}
                       {showVerseMarker && prevEntry != null ? " " : null}
                       <span className={baseClassName}>
@@ -595,15 +638,23 @@ export function FullSurahText(props: FullSurahTextProps) {
                 })}
                 {pageWordEntries.length > 0 && inlineVerseFinishedInSection ? (
                   <>
-                    <span
-                      className="verse-number-marker verse-number-marker--circle"
-                      aria-label={`Ayah ${toArabicNumerals(pageWordEntries[pageWordEntries.length - 1].orderInChapter)}`}
+                    <button
+                      type="button"
+                      className={`verse-number-marker verse-number-marker--circle cursor-pointer transition hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-2 focus:ring-offset-background ${
+                        bookmarkForCurrentChapter?.verseNumber === pageWordEntries[pageWordEntries.length - 1].orderInChapter ? "verse-number-marker--bookmarked" : ""
+                      }`}
+                      aria-label={`Ayah ${toArabicNumerals(pageWordEntries[pageWordEntries.length - 1].orderInChapter)} – click to bookmark`}
+                      title="Bookmark this verse"
+                      onClick={() => {
+                        const last = pageWordEntries[pageWordEntries.length - 1];
+                        if (chapterId != null) handleBookmarkAtVerse(last.verseKey, last.orderInChapter);
+                      }}
                     >
                       {toArabicNumerals(
                         pageWordEntries[pageWordEntries.length - 1]
                           .orderInChapter,
                       )}
-                    </span>
+                    </button>
                   </>
                 ) : null}
               </>
@@ -649,12 +700,20 @@ export function FullSurahText(props: FullSurahTextProps) {
                         ))
                       : verse.verse.textUthmani}
                   </span>
-                  <span
-                    className="verse-number-marker verse-number-marker--circle"
-                    aria-label={`Ayah ${verse.orderInChapter}`}
+                  <button
+                    type="button"
+                    className={`verse-number-marker verse-number-marker--circle cursor-pointer transition hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-2 focus:ring-offset-background ${
+                      bookmarkForCurrentChapter?.verseNumber === verse.orderInChapter ? "verse-number-marker--bookmarked" : ""
+                    }`}
+                    aria-label={`Ayah ${toArabicNumerals(verse.orderInChapter)} – click to bookmark`}
+                    title="Bookmark this verse"
+                    onClick={() =>
+                      chapterId != null &&
+                      handleBookmarkAtVerse(verse.verse.verseKey, verse.orderInChapter)
+                    }
                   >
                     {toArabicNumerals(verse.orderInChapter)}
-                  </span>
+                  </button>
                   {" "}
                 </Fragment>
               );
@@ -714,13 +773,27 @@ export function FullSurahText(props: FullSurahTextProps) {
                 }`}
                 onClick={handleGoToBookmark}
                 aria-label={safePage === bookmarkForCurrentChapter.pageIndex ? "This section is bookmarked" : "Go to bookmarked section"}
-                title={safePage === bookmarkForCurrentChapter.pageIndex ? "This section is bookmarked" : `Go to Section ${bookmarkForCurrentChapter.pageIndex + 1}`}
+                title={
+                  safePage === bookmarkForCurrentChapter.pageIndex
+                    ? bookmarkForCurrentChapter.verseNumber != null
+                      ? `Bookmarked (${toArabicNumerals(bookmarkForCurrentChapter.verseNumber)})`
+                      : "Bookmarked"
+                    : bookmarkForCurrentChapter.verseNumber != null
+                      ? `Go to Section ${bookmarkForCurrentChapter.pageIndex + 1} (${toArabicNumerals(
+                          bookmarkForCurrentChapter.verseNumber,
+                        )})`
+                      : `Go to Section ${bookmarkForCurrentChapter.pageIndex + 1}`
+                }
               >
                 <Bookmark
                   className={`h-3.5 w-3.5 ${safePage === bookmarkForCurrentChapter.pageIndex ? "fill-current" : ""}`}
                   aria-hidden
                 />
-                {safePage === bookmarkForCurrentChapter.pageIndex ? "This is bookmarked" : "Go to bookmark"}
+                {safePage === bookmarkForCurrentChapter.pageIndex
+                  ? bookmarkForCurrentChapter.verseNumber != null
+                    ? `Bookmarked (${toArabicNumerals(bookmarkForCurrentChapter.verseNumber)})`
+                    : "Bookmarked"
+                  : "Go to bookmark"}
               </button>
             ) : null}
           </div>
@@ -735,19 +808,27 @@ export function FullSurahText(props: FullSurahTextProps) {
           aria-modal="true"
           aria-label="Full surah full screen preview"
         >
-          <div className="flex shrink-0 items-center justify-between gap-4 border-b border-white/10 bg-surface-muted/30 px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-foreground truncate">
-                {chapterName ?? "Surah"} • Section {fullScreenCurrentSection + 1} of {fullScreenTotalSections}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-col gap-2 border-b border-white/10 bg-surface-muted/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:min-w-0 sm:flex-1 sm:items-center sm:justify-between">
+              <div className="flex items-center justify-between gap-4">
+                <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                  {chapterName ?? "Surah"} • Section {fullScreenCurrentSection + 1} of {fullScreenTotalSections}
+                </p>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-foreground transition hover:bg-white/10"
+                  onClick={() => setFullScreenOpen(false)}
+                  aria-label="Close full screen"
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
               {chapterId != null && (
-                <>
+                <div className="flex w-full gap-2 sm:w-auto sm:justify-start">
                   <button
                     type="button"
                     disabled={fullScreenCurrentSection === bookmarkForCurrentChapter?.pageIndex}
-                    className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:border-white/20 hover:bg-white/10 disabled:cursor-default disabled:opacity-50 disabled:hover:border-white/10 disabled:hover:bg-white/5"
+                    className="flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-foreground transition hover:border-white/20 hover:bg-white/10 disabled:cursor-default disabled:opacity-50 disabled:hover:border-white/10 disabled:hover:bg-white/5 sm:flex-initial sm:justify-start"
                     onClick={handleSaveBookmarkFullScreen}
                     aria-label="Save bookmark at current section"
                   >
@@ -760,32 +841,38 @@ export function FullSurahText(props: FullSurahTextProps) {
                   {bookmarkForCurrentChapter != null ? (
                     <button
                       type="button"
-                      className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                      className={`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition sm:flex-initial sm:justify-start ${
                         fullScreenCurrentSection === bookmarkForCurrentChapter.pageIndex
                           ? "border-brand bg-brand/20 text-brand cursor-default"
                           : "border-white/10 bg-white/5 text-foreground hover:border-white/20 hover:bg-white/10"
                       }`}
                       onClick={handleGoToBookmarkFullScreen}
                       aria-label={fullScreenCurrentSection === bookmarkForCurrentChapter.pageIndex ? "This section is bookmarked" : "Go to bookmarked section"}
-                      title={fullScreenCurrentSection === bookmarkForCurrentChapter.pageIndex ? "This section is bookmarked" : `Go to Section ${bookmarkForCurrentChapter.pageIndex + 1}`}
+                      title={
+                        fullScreenCurrentSection === bookmarkForCurrentChapter.pageIndex
+                          ? bookmarkForCurrentChapter.verseNumber != null
+                            ? `Bookmarked (${toArabicNumerals(bookmarkForCurrentChapter.verseNumber)})`
+                            : "Bookmarked"
+                          : bookmarkForCurrentChapter.verseNumber != null
+                            ? `Go to Section ${bookmarkForCurrentChapter.pageIndex + 1} (Verse ${toArabicNumerals(
+                                bookmarkForCurrentChapter.verseNumber,
+                              )})`
+                            : `Go to Section ${bookmarkForCurrentChapter.pageIndex + 1}`
+                      }
                     >
                       <Bookmark
                         className={`h-4 w-4 ${fullScreenCurrentSection === bookmarkForCurrentChapter.pageIndex ? "fill-current" : ""}`}
                         aria-hidden
                       />
-                      {fullScreenCurrentSection === bookmarkForCurrentChapter.pageIndex ? "This is bookmarked" : "Go to bookmark"}
+                      {fullScreenCurrentSection === bookmarkForCurrentChapter.pageIndex
+                        ? bookmarkForCurrentChapter.verseNumber != null
+                          ? `Bookmarked (${toArabicNumerals(bookmarkForCurrentChapter.verseNumber)})`
+                          : "Bookmarked"
+                        : "Go to bookmark"}
                     </button>
                   ) : null}
-                </>
+                </div>
               )}
-              <button
-                type="button"
-                className="rounded-lg border border-white/10 bg-white/5 p-2 text-foreground transition hover:bg-white/10"
-                onClick={() => setFullScreenOpen(false)}
-                aria-label="Close full screen"
-              >
-                <X className="h-5 w-5" aria-hidden />
-              </button>
             </div>
           </div>
           <div
@@ -817,9 +904,9 @@ export function FullSurahText(props: FullSurahTextProps) {
                       fullScreenSectionRefs.current[sectionIndex] = el;
                     }}
                     data-section-index={sectionIndex}
-                    className="py-6"
+                    className="py-3"
                   >
-                    <p className="mb-2 text-xs font-semibold text-foreground-muted">
+                    <p className="mb-1 text-[10px] font-normal text-foreground-muted opacity-80">
                       Section {sectionIndex + 1}
                     </p>
                     <div className="surah-paragraph">
@@ -838,12 +925,20 @@ export function FullSurahText(props: FullSurahTextProps) {
                         return (
                           <Fragment key={`${entry.verseKey}-${sectionIndex}-${i}`}>
                             {showVerseMarker && prevEntry != null ? (
-                              <span
-                                className="verse-number-marker verse-number-marker--circle"
-                                aria-label={`Ayah ${toArabicNumerals(prevEntry.orderInChapter)}`}
+                              <button
+                                type="button"
+                                className={`verse-number-marker verse-number-marker--circle cursor-pointer transition hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-2 focus:ring-offset-background ${
+                                  bookmarkForCurrentChapter?.verseNumber === prevEntry.orderInChapter ? "verse-number-marker--bookmarked" : ""
+                                }`}
+                                aria-label={`Ayah ${toArabicNumerals(prevEntry.orderInChapter)} – click to bookmark`}
+                                title="Bookmark this verse"
+                                onClick={() =>
+                                  chapterId != null &&
+                                  handleBookmarkAtVerse(prevEntry.verseKey, prevEntry.orderInChapter, sectionIndex)
+                                }
                               >
                                 {toArabicNumerals(prevEntry.orderInChapter)}
-                              </span>
+                              </button>
                             ) : null}
                             {showVerseMarker && prevEntry != null ? " " : null}
                             <span className={baseClassName}>
@@ -868,12 +963,20 @@ export function FullSurahText(props: FullSurahTextProps) {
                         );
                       })}
                       {sectionWords.length > 0 && verseFinishedInSection ? (
-                        <span
-                          className="verse-number-marker verse-number-marker--circle"
-                          aria-label={`Ayah ${toArabicNumerals(sectionWords[sectionWords.length - 1].orderInChapter)}`}
+                        <button
+                          type="button"
+                          className={`verse-number-marker verse-number-marker--circle cursor-pointer transition hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-brand/50 focus:ring-offset-2 focus:ring-offset-background ${
+                            bookmarkForCurrentChapter?.verseNumber === sectionWords[sectionWords.length - 1].orderInChapter ? "verse-number-marker--bookmarked" : ""
+                          }`}
+                          aria-label={`Ayah ${toArabicNumerals(sectionWords[sectionWords.length - 1].orderInChapter)} – click to bookmark`}
+                          title="Bookmark this verse"
+                          onClick={() => {
+                            const last = sectionWords[sectionWords.length - 1];
+                            if (chapterId != null) handleBookmarkAtVerse(last.verseKey, last.orderInChapter, sectionIndex);
+                          }}
                         >
                           {toArabicNumerals(sectionWords[sectionWords.length - 1].orderInChapter)}
-                        </span>
+                        </button>
                       ) : null}
                     </div>
                   </div>

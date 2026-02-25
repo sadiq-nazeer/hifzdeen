@@ -7,6 +7,10 @@ export type ReciteBookmark = {
   id: string;
   chapterId: number;
   pageIndex: number;
+  /** Verse key (e.g. "1:15") at the start of the bookmarked section */
+  verseKey?: string;
+  /** Verse number (orderInChapter) at the start of the bookmarked section */
+  verseNumber?: number;
   chapterName?: string;
   createdAt: number;
 };
