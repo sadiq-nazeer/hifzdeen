@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 type CollectionItem = { id: string; name?: string; [key: string]: unknown };
-type CollectionsData = { collections?: CollectionItem[]; [key: string]: unknown };
+type CollectionsData = { collections?: CollectionItem[]; errorMessage?: string; [key: string]: unknown };
 
 export default function CollectionsPage() {
   const [data, setData] = useState<CollectionsData | null>(null);
@@ -18,6 +18,12 @@ export default function CollectionsPage() {
     }
     if (!res.ok) {
       setStatus("error");
+      try {
+        const json = (await res.json()) as { error?: string };
+        setData({ errorMessage: json.error ?? "Unable to load collections." });
+      } catch {
+        setData({ errorMessage: "Unable to load collections." });
+      }
       return;
     }
     const json = (await res.json()) as CollectionsData;
@@ -54,7 +60,10 @@ export default function CollectionsPage() {
   if (status === "error") {
     return (
       <main className="mx-auto max-w-6xl px-6 pb-12 pt-6">
-        <p className="text-muted-foreground">Unable to load collections.</p>
+        <p className="text-muted-foreground">{data?.errorMessage ?? "Unable to load collections."}</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          If you see a 403, ask Quran Foundation to enable the &quot;collection&quot; scope for your client.
+        </p>
       </main>
     );
   }

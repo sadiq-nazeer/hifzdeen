@@ -81,3 +81,26 @@ export async function getCollections(
     { method: "GET" },
   );
 }
+
+export type UserProfile = {
+  id?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  createdAt?: string;
+  photoUrl?: string;
+  [key: string]: unknown;
+};
+
+export type UserProfileResponse = {
+  success?: boolean;
+  data?: UserProfile;
+  [key: string]: unknown;
+};
+
+/** Requires user.profile.read scope (or user scope). Returns null on 403/404. */
+export async function getProfile(
+  session: SessionTokens,
+): Promise<UserApiResult<UserProfileResponse>> {
+  return fetchUserApi<UserProfileResponse>(session, "auth/v1/users/me", { method: "GET" });
+}

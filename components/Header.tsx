@@ -53,6 +53,12 @@ export async function Header() {
               >
                 Collections
               </Link>
+              <Link
+                href="/profile"
+                className="text-sm text-foreground/80 underline-offset-4 hover:underline"
+              >
+                Profile
+              </Link>
               {displayName && (
                 <span className="hidden max-w-[8rem] truncate text-sm text-muted-foreground sm:max-w-[12rem]">
                   {displayName}

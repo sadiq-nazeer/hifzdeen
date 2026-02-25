@@ -117,3 +117,27 @@ Use the same environment as the one in which your client and redirect URI are co
 | Invalid grant / 401 after callback | Don’t reuse the same authorization code; use prelive vs production consistently; check system time (clock skew). |
 
 For more on errors and security, see the [OAuth2 doc – Important Considerations & Troubleshooting](https://api-docs.quran.foundation/docs/tutorials/oidc/getting-started-with-oauth2#important-considerations).
+
+---
+
+## 6. User APIs and scopes (403 Forbidden)
+
+After sign-in, the app calls Quran Foundation **User APIs** (e.g. Collections, Profile) with your access token. Each endpoint requires specific **OAuth2 scopes** to be **allowed for your client** by Quran Foundation. If a scope is not enabled for your client, that API returns **403 Forbidden**.
+
+| Feature        | API used              | Scope required        | If you get 403 |
+|----------------|-----------------------|------------------------|----------------|
+| **Collections** | `GET /auth/v1/collections` | `collection`           | Ask QF to enable the **collection** scope for your client. |
+| **Profile**    | `GET /auth/v1/users/me`   | `user` or `user.profile.read` | Ask QF to enable **user** (or **user.profile.read**) for your client. |
+| Header name/email | From ID token (optional) | `openid` (+ often `user`) | Ask QF to enable **openid** for your client so the app receives an ID token with name/email. |
+
+**How it works**
+
+1. **Sign in** → You are redirected to Quran Foundation (e.g. Google login). The app requests only the scopes it is allowed to request (see `app/api/auth/login/route.ts`: currently `offline_access collection`). QF may restrict which scopes your client can request (e.g. no `openid` or `user` until they enable them).
+2. **Callback** → The app exchanges the authorization code for an **access token** (and optionally **refresh token**, **id token**). These are stored in an encrypted cookie.
+3. **User APIs** → When you open **Collections** or **Profile**, the app sends the access token in the `x-auth-token` header and your `QF_CLIENT_ID` in `x-client-id` to Quran Foundation's API. If the token's scopes do not include what the endpoint needs, or the client is not allowed that scope, QF returns **403**.
+
+**What to do**
+
+- If **Collections** returns 403: ask Quran Foundation support to enable the **collection** scope for your client ID.
+- If **Profile** returns 403 or shows no name/email: ask them to enable **user** (or **user.profile.read**) and, for the header display, **openid**.
+- Scopes are configured **per client** on Quran Foundation's side; the app cannot add scopes that the client is not allowed to request.
