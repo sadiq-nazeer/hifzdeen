@@ -65,7 +65,7 @@ export default async function Home({
   const signinFailed = params?.signin === "failed";
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-16 px-6 pb-16 pt-6 lg:px-12">
+    <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-12 px-6 pb-16 pt-4 lg:px-12">
       {signinFailed && (
         <div
           className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200"

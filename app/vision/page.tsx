@@ -32,7 +32,7 @@ const roadmaps = [
 
 export default function VisionPage() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-10 px-6 pb-16 pt-6">
+    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-10 px-6 pb-16 pt-4">
       <Link
         href="/"
         className="text-sm text-foreground-muted transition hover:text-brand"

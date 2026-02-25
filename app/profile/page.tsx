@@ -46,7 +46,7 @@ export default function ProfilePage() {
 
   if (status === "loading") {
     return (
-      <main className="mx-auto max-w-6xl px-6 pb-12 pt-6">
+      <main className="mx-auto max-w-6xl px-6 pb-12 pt-4">
         <p className="text-muted-foreground">Loading profile…</p>
       </main>
     );
@@ -54,7 +54,7 @@ export default function ProfilePage() {
 
   if (status === "unauthenticated") {
     return (
-      <main className="mx-auto max-w-6xl px-6 pb-12 pt-6">
+      <main className="mx-auto max-w-6xl px-6 pb-12 pt-4">
         <p className="text-muted-foreground">Sign in to view your profile.</p>
         <a
           href="/api/auth/login"
@@ -68,7 +68,7 @@ export default function ProfilePage() {
 
   if (status === "error") {
     return (
-      <main className="mx-auto max-w-6xl px-6 pb-12 pt-6">
+      <main className="mx-auto max-w-6xl px-6 pb-12 pt-4">
         <h1 className="text-2xl font-semibold text-foreground">Profile</h1>
         <p className="mt-4 text-muted-foreground">{profile?.error ?? "Unable to load profile."}</p>
         <p className="mt-2 text-sm text-muted-foreground">
@@ -86,7 +86,7 @@ export default function ProfilePage() {
   const name = [d?.firstName, d?.lastName].filter(Boolean).join(" ") || null;
 
   return (
-    <main className="mx-auto max-w-6xl px-6 pb-12 pt-6">
+    <main className="mx-auto max-w-6xl px-6 pb-12 pt-4">
       <h1 className="text-2xl font-semibold text-foreground">Profile</h1>
       <div className="mt-6 space-y-2 text-foreground">
         {name && <p><span className="text-muted-foreground">Name:</span> {name}</p>}
