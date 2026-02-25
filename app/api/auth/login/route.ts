@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { getQfOAuthConfig } from "@/lib/auth/qfOAuthConfig";
-import { generatePkcePair } from "@/lib/auth/pkce";
 import { buildPendingAuthCookieHeader } from "@/lib/auth/pendingAuthCookie";
+import { generatePkcePair } from "@/lib/auth/pkce";
+import { getQfOAuthConfig } from "@/lib/auth/qfOAuthConfig";
 
-const DEFAULT_SCOPE = "openid offline_access user collection";
+// openid omitted: some QF clients are not allowed to request it; we still get access_token + refresh_token
+const DEFAULT_SCOPE = "offline_access user collection";
 
 export async function GET() {
   try {
