@@ -12,8 +12,10 @@ type TokenResponse = {
   scope?: string;
 };
 
-function redirectHome(request: NextRequest, extraCookies: string[] = []): NextResponse {
-  const response = NextResponse.redirect(new URL("/", request.url), { status: 302 });
+function redirectHome(request: NextRequest, extraCookies: string[] = [], failed = false): NextResponse {
+  const url = new URL("/", request.url);
+  if (failed) url.searchParams.set("signin", "failed");
+  const response = NextResponse.redirect(url, { status: 302 });
   response.headers.append("Set-Cookie", buildClearPendingAuthCookieHeader());
   for (const c of extraCookies) {
     response.headers.append("Set-Cookie", c);
@@ -28,45 +30,53 @@ export async function GET(request: NextRequest) {
   const errorParam = searchParams.get("error");
 
   if (errorParam) {
-    return redirectHome(request);
+    return redirectHome(request, [], true);
   }
 
   if (!code || !state) {
-    return redirectHome(request);
+    return redirectHome(request, [], true);
   }
 
   const cookieHeader = request.headers.get("cookie");
   const pending = getAndClearPendingAuthFromCookie(cookieHeader);
   if (!pending) {
-    return redirectHome(request);
+    return redirectHome(request, [], true);
   }
   if (pending.state !== state) {
-    return redirectHome(request);
+    return redirectHome(request, [], true);
   }
 
   try {
     const config = getQfOAuthConfig();
     if (pending.redirectUri !== config.redirectUri) {
-      return redirectHome(request);
+      return redirectHome(request, [], true);
     }
 
     const body = new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: config.clientId,
       code,
       redirect_uri: config.redirectUri,
       code_verifier: pending.codeVerifier,
     });
+    const headers: Record<string, string> = {
+      "Content-Type": "application/x-www-form-urlencoded",
+    };
+    if (config.clientSecret) {
+      const auth = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64");
+      headers.Authorization = `Basic ${auth}`;
+    } else {
+      body.set("client_id", config.clientId);
+    }
 
     const tokenRes = await fetch(`${config.authBaseUrl}/oauth2/token`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers,
       body: body.toString(),
       cache: "no-store",
     });
 
     if (!tokenRes.ok) {
-      return redirectHome(request);
+      return redirectHome(request, [], true);
     }
 
     const data = (await tokenRes.json()) as TokenResponse;
@@ -82,6 +92,6 @@ export async function GET(request: NextRequest) {
 
     return redirectHome(request, [sessionCookie]);
   } catch {
-    return redirectHome(request);
+    return redirectHome(request, [], true);
   }
 }

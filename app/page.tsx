@@ -56,9 +56,28 @@ const upcomingFeatures = [
   },
 ];
 
-export default function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ signin?: string }>;
+}) {
+  const params = await searchParams;
+  const signinFailed = params?.signin === "failed";
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-16 px-6 pb-16 pt-6 lg:px-12">
+      {signinFailed && (
+        <div
+          className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200"
+          role="alert"
+        >
+          Sign-in didn’t complete. Please try again or use the same browser where you started sign-in.
+          {" "}
+          <a href="/api/auth/login" className="font-medium underline underline-offset-2">
+            Sign in again
+          </a>
+        </div>
+      )}
       <Hero
         title="HifzDeen"
         description="An immersive platform for Quran memorization, recitation, and listening. Experience the Holy Quran with beautiful recitations, translations, and interactive learning tools."
