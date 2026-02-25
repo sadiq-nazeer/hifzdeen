@@ -5,6 +5,14 @@ import type { CoachBundleParams } from "@/lib/hooks/useCoachBundle";
 import type { ChapterSummary, ReciterProfile } from "@/lib/types/quran";
 
 const SAHIH_INTERNATIONAL_ID = 20;
+const TAMIL_LEGACY_ID = 50;
+const TAMIL_EDITION = "ta.tamil";
+const SINHALA_EDITION = "si.naseemismail";
+
+type TranslationChoice = "none" | "sahih" | "tamil" | "sinhala";
+
+const isAlquranProvider = (): boolean =>
+  process.env.NEXT_PUBLIC_TRANSLATION_PROVIDER === "alquran";
 
 type Props = {
   chapters: ChapterSummary[];
@@ -73,6 +81,65 @@ export const CoachConfigurator = ({
       })),
     [reciters],
   );
+
+  const translationOptions = useMemo(() => {
+    return [
+      { value: "none" as const, label: "None" },
+      { value: "sahih" as const, label: "Sahih International", subtitle: "English" },
+      { value: "tamil" as const, label: "Tamil (Jan Trust)" },
+      { value: "sinhala" as const, label: "Sinhala (Naseem Ismail)" },
+    ];
+  }, []);
+
+  const currentTranslationChoice = useMemo((): TranslationChoice => {
+    if (value.translationId === SAHIH_INTERNATIONAL_ID) return "sahih";
+    if (value.translationId === TAMIL_LEGACY_ID) return "tamil";
+    if (value.translationEdition === TAMIL_EDITION) return "tamil";
+    if (value.translationEdition === SINHALA_EDITION) return "sinhala";
+    return "none";
+  }, [value.translationId, value.translationEdition]);
+
+  const handleTranslationChange = (choice: TranslationChoice | undefined) => {
+    if (!choice || choice === "none") {
+      onChange({
+        ...value,
+        translationId: undefined,
+        translationEdition: undefined,
+      });
+      return;
+    }
+    if (choice === "sahih") {
+      onChange({
+        ...value,
+        translationId: SAHIH_INTERNATIONAL_ID,
+        translationEdition: undefined,
+      });
+      return;
+    }
+    if (choice === "tamil") {
+      if (isAlquranProvider()) {
+        onChange({
+          ...value,
+          translationId: undefined,
+          translationEdition: TAMIL_EDITION,
+        });
+      } else {
+        onChange({
+          ...value,
+          translationId: TAMIL_LEGACY_ID,
+          translationEdition: undefined,
+        });
+      }
+      return;
+    }
+    if (choice === "sinhala") {
+      onChange({
+        ...value,
+        translationId: undefined,
+        translationEdition: SINHALA_EDITION,
+      });
+    }
+  };
 
   const inputClasses =
     "rounded-2xl border border-white/10 bg-surface-muted/80 px-4 py-3 text-base text-foreground outline-none transition-[border-color,box-shadow] focus:border-brand focus:ring-2 focus:ring-brand/20";
@@ -191,49 +258,14 @@ export const CoachConfigurator = ({
             <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-foreground-muted">
               Content
             </h3>
-            <button
-              type="button"
-              onClick={() =>
-                onChange({
-                  ...value,
-                  translationId:
-                    value.translationId === SAHIH_INTERNATIONAL_ID
-                      ? undefined
-                      : SAHIH_INTERNATIONAL_ID,
-                })
-              }
-              className={`inline-flex items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-sm font-medium transition-colors ${
-                value.translationId === SAHIH_INTERNATIONAL_ID
-                  ? "border-brand/60 bg-brand/15 text-foreground"
-                  : "border-white/10 bg-surface-muted/60 text-foreground-muted hover:border-brand/40 hover:bg-brand/10 hover:text-foreground"
-              }`}
-              aria-pressed={value.translationId === SAHIH_INTERNATIONAL_ID}
-            >
-              <div className="flex flex-col text-left">
-                <span className="text-xs uppercase tracking-[0.3em] text-foreground-muted">
-                  Translation
-                </span>
-                <span className="text-sm">
-                  Sahih International (EN)
-                </span>
-              </div>
-              <span
-                className={`relative inline-flex h-6 w-11 items-center rounded-full px-0.5 transition-colors ${
-                  value.translationId === SAHIH_INTERNATIONAL_ID
-                    ? "bg-brand"
-                    : "bg-white/15"
-                }`}
-                aria-hidden
-              >
-                <span
-                  className={`inline-block h-5 w-5 transform rounded-full bg-background shadow-sm transition-transform ${
-                    value.translationId === SAHIH_INTERNATIONAL_ID
-                      ? "translate-x-5"
-                      : "translate-x-0"
-                  }`}
-                />
-              </span>
-            </button>
+            <SearchableSelect<TranslationChoice>
+              id="session-translation"
+              label="Translation"
+              placeholder="Select translation"
+              options={translationOptions}
+              value={currentTranslationChoice}
+              onChange={handleTranslationChange}
+            />
           </div>
         )}
       </div>
