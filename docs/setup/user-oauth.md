@@ -141,3 +141,37 @@ After sign-in, the app calls Quran Foundation **User APIs** (e.g. Collections, P
 - If **Collections** returns 403: ask Quran Foundation support to enable the **collection** scope for your client ID.
 - If **Profile** returns 403 or shows no name/email: ask them to enable **user** (or **user.profile.read**) and, for the header display, **openid**.
 - Scopes are configured **per client** on Quran Foundation's side; the app cannot add scopes that the client is not allowed to request.
+
+---
+
+## 7. Request all scopes (email template)
+
+Until Quran Foundation enables the required OAuth2 scopes for your client, sign-in is disabled in the app. To request access to all scopes needed for Collections, Profile, and header name/email, contact their developers support.
+
+**Support email:** [developers@quran.foundation](mailto:developers@quran.foundation)  
+*(Confirm the current contact on their docs: [User APIs Quick Start – Need Help?](https://api-docs.quran.foundation/docs/tutorials/oidc/user-apis-quickstart#-need-help))*
+
+**Copy-paste email template:**
+
+```
+Subject: Enable OAuth2 scopes for client [YOUR_CLIENT_ID]
+
+Assalāmu ʿalaykum,
+
+I am integrating User APIs (Collections, Profile) and sign-in with Quran Foundation OAuth2. Please enable the following scopes for my OAuth2 client so that sign-in and User API calls work correctly:
+
+Client ID: [YOUR_CLIENT_ID]
+Environment: production (or prelive, if you use that)
+
+Scopes to enable for this client:
+- openid       (for ID token / header name and email)
+- offline_access  (for refresh tokens)
+- user         (for Profile API: name, email; or user.profile.read if you use granular scopes)
+- collection   (for Collections API)
+
+Redirect URI already registered: [e.g. https://hifzdeen.com/oauth/callback]
+
+Thank you.
+```
+
+Replace `[YOUR_CLIENT_ID]` and the redirect URI with your actual values. Once QF confirms the scopes are enabled, re-enable the Sign in button: in `components/Header.tsx`, replace the disabled "Sign in" span with the working link again (`<a href="/api/auth/login" ...>Sign in</a>`).

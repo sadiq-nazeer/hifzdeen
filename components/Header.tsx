@@ -72,12 +72,12 @@ export async function Header() {
               </a>
             </>
           ) : (
-            <a
-              href="/api/auth/login"
-              className="text-sm text-foreground/80 underline-offset-4 hover:underline"
+            <span
+              className="cursor-not-allowed text-sm text-foreground/40 underline-offset-4"
+              title="Sign in will be available once Quran Foundation enables the required scopes. See docs/setup/user-oauth.md for the email to request them."
             >
               Sign in
-            </a>
+            </span>
           )}
           <ThemeSwitcher />
         </div>
