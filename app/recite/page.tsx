@@ -17,7 +17,7 @@ const TAMIL_LEGACY_ID = 50;
 const TAMIL_EDITION = "ta.tamil";
 const SINHALA_EDITION = "si.naseemismail";
 
-type TranslationChoice = "none" | "english" | "tamil" | "sinhala";
+type TranslationChoice = "none" | "sahih" | "tamil" | "sinhala";
 
 const isAlquranProvider = (): boolean =>
   process.env.NEXT_PUBLIC_TRANSLATION_PROVIDER === "alquran";
@@ -78,21 +78,17 @@ export default function RecitePage() {
     [chapters],
   );
 
-  const alquranEnabled = isAlquranProvider();
-
   const translationOptions = useMemo(() => {
     return [
       { value: "none" as const, label: "None" },
-      { value: "english" as const, label: "English", subtitle: "(Sahih International)" },
-      { value: "tamil" as const, label: "Tamil", subtitle: "(Jan Trust)" },
-      ...(alquranEnabled
-        ? [{ value: "sinhala" as const, label: "Sinhala", subtitle: "Coming Soon(Naseem Ismail)" }]
-        : []),
+      { value: "sahih" as const, label: "English (Sahih International)", subtitle: "English" },
+      { value: "tamil" as const, label: "Tamil (Jan Trust)" },
+      { value: "sinhala" as const, label: "Sinhala (Naseem Ismail)" },
     ];
-  }, [alquranEnabled]);
+  }, []);
 
   const currentTranslationChoice = useMemo((): TranslationChoice => {
-    if (params.translationId === SAHIH_INTERNATIONAL_ID) return "english";
+    if (params.translationId === SAHIH_INTERNATIONAL_ID) return "sahih";
     if (params.translationId === TAMIL_LEGACY_ID) return "tamil";
     if (params.translationEdition === TAMIL_EDITION) return "tamil";
     if (params.translationEdition === SINHALA_EDITION) return "sinhala";
@@ -109,7 +105,7 @@ export default function RecitePage() {
       return;
     }
 
-    if (choice === "english") {
+    if (choice === "sahih") {
       setParams((prev) => ({
         ...prev,
         translationId: SAHIH_INTERNATIONAL_ID,
