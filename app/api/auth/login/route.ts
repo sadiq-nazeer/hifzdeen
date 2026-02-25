@@ -20,6 +20,7 @@ export async function GET() {
       nonce,
       code_challenge: codeChallenge,
       code_challenge_method: "S256",
+      prompt: "select_account",
     });
 
     const authUrl = `${config.authBaseUrl}/oauth2/auth?${params.toString()}`;
