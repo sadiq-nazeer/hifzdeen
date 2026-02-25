@@ -30,6 +30,16 @@ export const jsonFetcher = async <TData>(
     }
 
     return (await response.json()) as TData;
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      err.name === "AbortError"
+    ) {
+      throw new Error(
+        "Request took too long. Please try again.",
+      );
+    }
+    throw err;
   } finally {
     clearTimeout(id);
   }

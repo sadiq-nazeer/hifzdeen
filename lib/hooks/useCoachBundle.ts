@@ -34,7 +34,11 @@ export const useCoachBundle = (params: CoachBundleParams) => {
 
   const { data, error, isLoading, mutate } = useSWR<CoachBundleResponse>(
     key,
-    (url) => jsonFetcher<CoachBundleResponse>(url),
+    (url) =>
+      jsonFetcher<CoachBundleResponse>(url, {
+        // Large surahs (e.g. 286 verses) can take a long time to build; avoid abort timeout.
+        timeoutMs: 90_000,
+      }),
     {
       revalidateOnFocus: false,
     },
