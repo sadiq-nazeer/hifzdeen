@@ -80,7 +80,7 @@ export default async function Home({
       )}
       <Hero
         title="HifzDeen"
-        description="An immersive platform for Quran memorization, recitation, and listening. Experience the Holy Quran with beautiful recitations, translations, and interactive learning tools."
+        description="A simple, modern platform for Quran, Hadith, stories, and other Islamic content, with clear translations and helpful tools for everyday use."
         stats={[
           {
             label: "Surahs with Translations",
