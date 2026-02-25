@@ -66,15 +66,12 @@ export async function Header() {
               </Link>
             </>
           ) : (
-            <button
-              type="button"
-              disabled
-              className="text-sm cursor-not-allowed text-foreground/40 underline-offset-4"
-              title="Coming soon"
-              aria-disabled="true"
+            <Link
+              href="/api/auth/login"
+              className="text-sm text-foreground/80 underline-offset-4 hover:underline"
             >
               Sign in
-            </button>
+            </Link>
           )}
           <ThemeSwitcher />
         </div>
