@@ -27,6 +27,11 @@ const editionToId = (edition: string): number => {
   const map: Record<string, number> = {
     "ta.tamil": 1001,
     "si.naseemismail": 1002,
+    "fr.hamidullah": 1003,
+    "es.cortes": 1004,
+    "ur.jalandhry": 1005,
+    "id.indonesian": 1006,
+    "hi.hindi": 1007,
   };
   return map[edition] ?? Math.abs(edition.split("").reduce((a, c) => a + c.charCodeAt(0), 0));
 };
@@ -37,6 +42,11 @@ const languageCodeToName = (code: string): string => {
     ta: "Tamil",
     si: "Sinhala",
     en: "English",
+    fr: "French",
+    es: "Spanish",
+    ur: "Urdu",
+    id: "Indonesian",
+    hi: "Hindi",
   };
   return names[code] ?? code;
 };

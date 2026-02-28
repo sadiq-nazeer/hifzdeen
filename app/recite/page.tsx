@@ -16,8 +16,22 @@ const SAHIH_INTERNATIONAL_ID = 20;
 const TAMIL_LEGACY_ID = 50;
 const TAMIL_EDITION = "ta.tamil";
 const SINHALA_EDITION = "si.naseemismail";
+const FRENCH_EDITION = "fr.hamidullah";
+const SPANISH_EDITION = "es.cortes";
+const URDU_EDITION = "ur.jalandhry";
+const INDONESIAN_EDITION = "id.indonesian";
+const HINDI_EDITION = "hi.hindi";
 
-type TranslationChoice = "none" | "sahih" | "tamil" | "sinhala";
+type TranslationChoice =
+  | "none"
+  | "sahih"
+  | "tamil"
+  | "sinhala"
+  | "french"
+  | "spanish"
+  | "urdu"
+  | "indonesian"
+  | "hindi";
 
 const isAlquranProvider = (): boolean =>
   process.env.NEXT_PUBLIC_TRANSLATION_PROVIDER === "alquran";
@@ -79,12 +93,36 @@ export default function RecitePage() {
   );
 
   const translationOptions = useMemo(() => {
-    return [
-      { value: "none" as const, label: "None" },
-      { value: "sahih" as const, label: "English (Sahih International)", subtitle: "English" },
-      { value: "tamil" as const, label: "Tamil (Jan Trust)", subtitle: "Tamil" },
-      { value: "sinhala" as const, label: "Sinhala (Naseem Ismail)", subtitle: "Sinhala" },
+    const base: Array<{
+      value: TranslationChoice;
+      label: string;
+      subtitle?: string;
+    }> = [
+      { value: "none", label: "None" },
+      {
+        value: "sahih",
+        label: "English (Sahih International)",
+        subtitle: "English",
+      },
+      { value: "tamil", label: "Tamil (Jan Trust)", subtitle: "Tamil" },
+      { value: "sinhala", label: "Sinhala (Naseem Ismail)", subtitle: "Sinhala" },
     ];
+
+    if (isAlquranProvider()) {
+      base.push(
+        { value: "french", label: "French (Hamidullah)", subtitle: "French" },
+        { value: "spanish", label: "Spanish (Cortes)", subtitle: "Spanish" },
+        { value: "urdu", label: "Urdu (Jalandhry)", subtitle: "Urdu" },
+        {
+          value: "indonesian",
+          label: "Indonesian (Bahasa Indonesia)",
+          subtitle: "Indonesian",
+        },
+        { value: "hindi", label: "Hindi (Farooq & Nadwi)", subtitle: "Hindi" },
+      );
+    }
+
+    return base;
   }, []);
 
   const currentTranslationChoice = useMemo((): TranslationChoice => {
@@ -92,6 +130,11 @@ export default function RecitePage() {
     if (params.translationId === TAMIL_LEGACY_ID) return "tamil";
     if (params.translationEdition === TAMIL_EDITION) return "tamil";
     if (params.translationEdition === SINHALA_EDITION) return "sinhala";
+    if (params.translationEdition === FRENCH_EDITION) return "french";
+    if (params.translationEdition === SPANISH_EDITION) return "spanish";
+    if (params.translationEdition === URDU_EDITION) return "urdu";
+    if (params.translationEdition === INDONESIAN_EDITION) return "indonesian";
+    if (params.translationEdition === HINDI_EDITION) return "hindi";
     return "none";
   }, [params.translationId, params.translationEdition]);
 
@@ -136,6 +179,46 @@ export default function RecitePage() {
         ...prev,
         translationId: undefined,
         translationEdition: SINHALA_EDITION,
+      }));
+    }
+
+    if (choice === "french") {
+      setParams((prev) => ({
+        ...prev,
+        translationId: undefined,
+        translationEdition: FRENCH_EDITION,
+      }));
+    }
+
+    if (choice === "spanish") {
+      setParams((prev) => ({
+        ...prev,
+        translationId: undefined,
+        translationEdition: SPANISH_EDITION,
+      }));
+    }
+
+    if (choice === "urdu") {
+      setParams((prev) => ({
+        ...prev,
+        translationId: undefined,
+        translationEdition: URDU_EDITION,
+      }));
+    }
+
+    if (choice === "indonesian") {
+      setParams((prev) => ({
+        ...prev,
+        translationId: undefined,
+        translationEdition: INDONESIAN_EDITION,
+      }));
+    }
+
+    if (choice === "hindi") {
+      setParams((prev) => ({
+        ...prev,
+        translationId: undefined,
+        translationEdition: HINDI_EDITION,
       }));
     }
   };
