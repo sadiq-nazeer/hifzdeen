@@ -200,7 +200,7 @@ export const VerseCard = ({ verse, progress, onProgressChange }: Props) => {
           onPause={() => setIsPlaying(false)}
           onEnded={() => setIsPlaying(false)}
           onTimeUpdate={setCurrentTime}
-          showStopButton={false}
+          showStopButton={true}
           enableDragging={true}
         />
       ) : (

@@ -9,6 +9,13 @@ const formatTime = (seconds: number): string => {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 };
 
+const PLAYBACK_RATE_MIN = 0.5;
+const PLAYBACK_RATE_MAX = 2;
+const PLAYBACK_RATE_STEP = 0.05;
+
+const roundRate = (n: number): number =>
+  Math.round(n / PLAYBACK_RATE_STEP) * PLAYBACK_RATE_STEP;
+
 type AudioPlayerProps = {
   audioUrl: string;
   durationSeconds?: number;
@@ -48,6 +55,7 @@ export const AudioPlayer = ({
 }: AudioPlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [loopSelection, setLoopSelection] = useState(loop);
+  const [playbackRate, setPlaybackRate] = useState(1);
   const [currentTime, setCurrentTime] = useState(0);
   const [trackDurationFromAudio, setTrackDurationFromAudio] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -61,6 +69,7 @@ export const AudioPlayer = ({
   const onEndedRef = useRef(onEnded);
   const onTimeUpdateRef = useRef(onTimeUpdate);
   const onNextRef = useRef(onNext);
+  const playbackRateRef = useRef(playbackRate);
 
   const effectiveDuration =
     durationSeconds > 0 ? durationSeconds : trackDurationFromAudio;
@@ -69,6 +78,15 @@ export const AudioPlayer = ({
   useEffect(() => {
     setLoopSelection(loop);
   }, [loop]);
+
+  // Apply playback rate to audio element
+  useEffect(() => {
+    playbackRateRef.current = playbackRate;
+    const audio = audioRef.current;
+    if (audio) {
+      audio.playbackRate = playbackRate;
+    }
+  }, [playbackRate]);
 
   // Sync audio element source
   useEffect(() => {
@@ -89,6 +107,7 @@ export const AudioPlayer = ({
     }
     audio.src = audioUrl;
     audio.loop = loopSelection;
+    audio.playbackRate = playbackRateRef.current;
     audio.load();
     if (advancingTrackRef.current) {
       // Keep playback continuous when parent advanced to the next verse.
@@ -393,6 +412,78 @@ export const AudioPlayer = ({
               </svg>
             </button>
           )}
+        </div>
+      </div>
+
+      {/* Playback speed */}
+      <div className="flex items-center gap-2 border-b border-foreground/10 px-4 py-2">
+        <span className="text-xs font-medium text-foreground-muted shrink-0">
+          Speed
+        </span>
+        <div
+          className="flex items-center rounded-lg border border-foreground/10 bg-foreground/5"
+          role="group"
+          aria-label="Playback speed"
+        >
+          <button
+            type="button"
+            onClick={() =>
+              setPlaybackRate((r) =>
+                roundRate(Math.max(PLAYBACK_RATE_MIN, r - PLAYBACK_RATE_STEP))
+              )
+            }
+            disabled={disabled || playbackRate <= PLAYBACK_RATE_MIN}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-l-lg border-r border-foreground/15 text-foreground transition hover:bg-foreground/10 disabled:opacity-40 disabled:hover:bg-transparent"
+            aria-label="Decrease playback speed"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M5 12h14" />
+            </svg>
+          </button>
+          <span
+            className="min-w-[3rem] shrink-0 py-1 text-center text-sm font-medium tabular-nums text-foreground"
+            aria-live="polite"
+          >
+            {parseFloat(playbackRate.toFixed(2))}x
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              setPlaybackRate((r) =>
+                roundRate(Math.min(PLAYBACK_RATE_MAX, r + PLAYBACK_RATE_STEP))
+              )
+            }
+            disabled={disabled || playbackRate >= PLAYBACK_RATE_MAX}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-r-lg border-l border-foreground/15 text-foreground transition hover:bg-foreground/10 disabled:opacity-40 disabled:hover:bg-transparent"
+            aria-label="Increase playback speed"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M12 5v14" />
+              <path d="M5 12h14" />
+            </svg>
+          </button>
         </div>
       </div>
 
